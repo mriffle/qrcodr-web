@@ -18,7 +18,7 @@ Scan it with any phone camera — it decodes to the live app.
 
 ## What it is
 
-`qrcodr-web` is a single-page React app that generates scannable QR codes from any text or URL payload, with stylistic options that go well beyond the usual black-and-white grid. It's a browser port of the [Python `qrcodr` desktop app](https://github.com/mriffle/qrcodr), reimagined as a zero-install web tool.
+`qrcodr-web` is a single-page React app that generates scannable QR codes from any text or URL payload, with stylistic options that go well beyond the usual black-and-white grid.
 
 Everything runs in the browser. There is no server, no analytics, and no network call after the initial page load. The page is fully usable offline once cached.
 
