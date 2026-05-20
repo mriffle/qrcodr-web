@@ -65,7 +65,12 @@ export function QrDrawing({ qr, style }: Props) {
   }
 
   return (
-    <div className="qr-frame" data-modules={size} data-version={version}>
+    <div
+      className="qr-frame"
+      data-modules={size}
+      data-version={version}
+      style={{ ['--qr-bg' as string]: style.background }}
+    >
       <div className="qr-drawing">
         <svg
           className="qr-drawing__svg"
@@ -75,7 +80,6 @@ export function QrDrawing({ qr, style }: Props) {
           aria-label={`QR code, ${String(size)} by ${String(size)} modules, version ${String(version)}`}
         >
           <rect
-            className="qr-paper"
             x={0}
             y={0}
             width={total}

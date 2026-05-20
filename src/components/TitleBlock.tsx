@@ -1,8 +1,5 @@
 import { useEffect, useState } from 'react';
 
-const NODE_ID = 'NODE-77A';
-const CHANNEL = 'CH·02';
-
 function formatStamp(d: Date): string {
   const yy = String(d.getFullYear()).slice(2);
   const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -39,12 +36,6 @@ export function TitleBlock() {
       </div>
       <div />
       <div className="masthead__channel" aria-label="System status">
-        <span className="masthead__chunk">
-          Node <strong>{NODE_ID}</strong>
-        </span>
-        <span className="masthead__chunk">
-          Chan <strong>{CHANNEL}</strong>
-        </span>
         <span className="masthead__chunk" data-testid="title-date">
           <strong>{stamp}</strong>
         </span>

@@ -9,6 +9,13 @@ import { DEFAULT_STYLE, generateQr, type QrResult } from './lib/qr';
 
 export function App() {
   const [rawPayload, setRawPayload] = useState('https://example.com');
+  const [foreground, setForeground] = useState(DEFAULT_STYLE.foreground);
+  const [background, setBackground] = useState(DEFAULT_STYLE.background);
+
+  const style = useMemo(
+    () => ({ ...DEFAULT_STYLE, foreground, background }),
+    [foreground, background],
+  );
 
   const validation = useMemo(() => validatePayload(rawPayload), [rawPayload]);
 
@@ -33,7 +40,13 @@ export function App() {
 
       <div className="console">
         <PayloadInput value={rawPayload} onChange={setRawPayload} error={error} />
-        <MetadataRows qr={qr} rawPayload={rawPayload} style={DEFAULT_STYLE} />
+        <MetadataRows
+          qr={qr}
+          rawPayload={rawPayload}
+          style={style}
+          onForegroundChange={setForeground}
+          onBackgroundChange={setBackground}
+        />
       </div>
 
       <section
@@ -49,10 +62,10 @@ export function App() {
         <span className={qr ? 'stage__readout' : 'stage__readout stage__readout--coral'}>
           {stageReadout}
         </span>
-        <QrDrawing qr={qr} style={DEFAULT_STYLE} />
+        <QrDrawing qr={qr} style={style} />
       </section>
 
-      <ExportRow qr={qr} style={DEFAULT_STYLE} />
+      <ExportRow qr={qr} style={style} />
     </main>
   );
 }

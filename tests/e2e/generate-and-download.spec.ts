@@ -47,7 +47,6 @@ test.describe('qrcodr-web · UI behavior', () => {
   test('renders the masthead on load', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByText('QRCODR', { exact: false })).toBeVisible();
-    await expect(page.getByText('NODE-77A')).toBeVisible();
     await expect(page.getByTestId('title-date')).toBeVisible();
   });
 
