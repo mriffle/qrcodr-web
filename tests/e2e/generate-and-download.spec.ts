@@ -110,6 +110,54 @@ test.describe('qrcodr-web · SVG download decode', () => {
   }
 });
 
+test.describe('qrcodr-web · center icon decode', () => {
+  test('selecting a center icon embeds it in the preview without breaking the layout', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByTestId('payload-input').fill('https://example.com');
+    await page.getByTestId('center-icon-trigger').click();
+    await page.getByTestId('center-icon-option-heart').click();
+    // The preview SVG should now contain a transformed <g> for the icon.
+    const overlay = page.locator('.qr-frame[data-modules] svg g[transform]');
+    await expect(overlay).toBeVisible();
+  });
+
+  for (const fixture of TEST_PAYLOADS) {
+    test(`PNG of "${fixture.name}" with heart center icon decodes back to its payload`, async ({
+      page,
+    }) => {
+      await page.goto('/');
+      await page.getByTestId('payload-input').fill(fixture.value);
+      await page.getByTestId('center-icon-trigger').click();
+      await page.getByTestId('center-icon-option-heart').click();
+      const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        page.getByTestId('export-png').click(),
+      ]);
+      const buffer = await readDownload(download);
+      const decoded = await decodePng(buffer);
+      expect(decoded).toBe(fixture.value);
+    });
+
+    test(`SVG of "${fixture.name}" with skull center icon decodes back to its payload`, async ({
+      page,
+    }) => {
+      await page.goto('/');
+      await page.getByTestId('payload-input').fill(fixture.value);
+      await page.getByTestId('center-icon-trigger').click();
+      await page.getByTestId('center-icon-option-skull').click();
+      const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        page.getByTestId('export-svg').click(),
+      ]);
+      const buffer = await readDownload(download);
+      const decoded = await decodeSvg(buffer);
+      expect(decoded).toBe(fixture.value);
+    });
+  }
+});
+
 test.describe('qrcodr-web · rounded modules decode', () => {
   test('toggling rounded mode flips the preview path to use arc commands', async ({ page }) => {
     await page.goto('/');

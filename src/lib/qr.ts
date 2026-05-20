@@ -4,14 +4,16 @@ import type { ValidatedPayload } from './payload';
 /**
  * Visual configuration for QR rendering. `moduleShape` selects whether
  * data modules render as crisp squares or smooth-blob rounded shapes;
- * `canvasShape` and `centerIcon` are v2 hooks not yet implemented.
+ * `canvasShape` is a v2 hook not yet implemented. `centerIcon` is an
+ * optional decorative overlay painted in the foreground color, sized
+ * to stay safely under the H error-correction budget.
  */
 export type QrStyle = {
   foreground: string;
   background: string;
   moduleShape: 'square' | 'rounded'; // v2: 'dot'
   canvasShape: 'square'; // v2: 'circle' | 'hex'
-  centerIcon?: { svg: string; sizeRatio: number };
+  centerIcon: { id: string; innerSvg: string } | null;
 };
 
 export type QrResult = {
@@ -31,11 +33,28 @@ export const QUIET_ZONE = 4;
 /** Fixed module-rounding radius in module units. 0.5 = full circle / pill. */
 const MODULE_RADIUS = 0.5;
 
+/**
+ * Center-icon side length as a fraction of the QR matrix side. ~22% keeps
+ * the icon plus its backing pad below ~7% of the QR area, comfortably under
+ * the H error-correction practical ceiling (~25% area). Tuned to scan
+ * reliably on every modern phone camera the E2E suite exercises.
+ */
+export const CENTER_ICON_SIZE_RATIO = 0.22;
+
+/**
+ * Padding (in module units) around the icon, filled with the background
+ * color. Gives scanners a clean field so the icon isn't crashing into
+ * adjacent dark modules — this is what makes the difference between
+ * "usually scans" and "always scans".
+ */
+export const CENTER_ICON_PAD_MODULES = 0.8;
+
 export const DEFAULT_STYLE: QrStyle = {
   foreground: '#0f1b3d',
   background: '#f0ede2',
   moduleShape: 'square',
   canvasShape: 'square',
+  centerIcon: null,
 };
 
 /**
@@ -276,6 +295,50 @@ export function shapeRenderingFor(style: QrStyle): 'crispEdges' | 'geometricPrec
 }
 
 /**
+ * Geometry of the center-icon overlay in QR-SVG user units (one unit =
+ * one module). Both the on-screen preview and the exported SVG go through
+ * this so they cannot drift apart. The icon is rendered into a 24-unit
+ * source viewBox (`src/assets/center-icons/*.svg`); `iconScale` is the
+ * factor to bring that into module space.
+ */
+export type CenterIconLayout = {
+  /** Top-left of the backing rect, in QR-SVG units (incl. quiet zone). */
+  padX: number;
+  padY: number;
+  /** Side length of the backing rect. */
+  padSize: number;
+  /** Top-left of the icon's transformed bounding box. */
+  iconX: number;
+  iconY: number;
+  /** Side length the 24-unit icon should scale to. */
+  iconSize: number;
+  /** Scale factor applied to the source 24-unit viewBox. */
+  iconScale: number;
+};
+
+/**
+ * Compute the icon overlay placement for a QR of the given `size` (in
+ * modules, excluding quiet zone). Coordinates are in the QR-SVG's user
+ * space, which includes the quiet zone — so the icon centers on the QR
+ * including its border, matching what scanners see.
+ */
+export function centerIconLayout(size: number): CenterIconLayout {
+  const total = size + QUIET_ZONE * 2;
+  const iconSize = size * CENTER_ICON_SIZE_RATIO;
+  const padSize = iconSize + CENTER_ICON_PAD_MODULES * 2;
+  const center = total / 2;
+  return {
+    padX: center - padSize / 2,
+    padY: center - padSize / 2,
+    padSize,
+    iconX: center - iconSize / 2,
+    iconY: center - iconSize / 2,
+    iconSize,
+    iconScale: iconSize / 24,
+  };
+}
+
+/**
  * Render a QR result as a standalone, scannable SVG string. Includes the
  * quiet zone. This is the canonical export artifact — the `.svg` download
  * and the source rasterized into PNG both go through this function. The
@@ -287,10 +350,36 @@ export function qrToSvgString(qr: QrResult, style: QrStyle): string {
   const total = size + QUIET_ZONE * 2;
   const d = qrToSvgPath(matrix, size, version, style);
   const shapeRendering = shapeRenderingFor(style);
+  const overlay = style.centerIcon
+    ? renderCenterIconOverlay(style.centerIcon, size, style.background, style.foreground)
+    : '';
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${String(total)} ${String(total)}" shape-rendering="${shapeRendering}">`,
     `<rect width="${String(total)}" height="${String(total)}" fill="${style.background}"/>`,
     `<path fill="${style.foreground}" d="${d}"/>`,
+    overlay,
     `</svg>`,
+  ].join('');
+}
+
+/**
+ * Render the backing-pad rect + scaled icon group. The icon SVGs use
+ * `fill="currentColor"`, so setting `color` on the wrapping `<g>` paints
+ * them in the foreground without needing per-icon edits. The backing pad
+ * (background color) gives scanners a clean field beneath the glyph.
+ */
+function renderCenterIconOverlay(
+  icon: { innerSvg: string },
+  size: number,
+  background: string,
+  foreground: string,
+): string {
+  if (icon.innerSvg.length === 0) return '';
+  const { padX, padY, padSize, iconX, iconY, iconScale } = centerIconLayout(size);
+  return [
+    `<rect x="${String(padX)}" y="${String(padY)}" width="${String(padSize)}" height="${String(padSize)}" fill="${background}"/>`,
+    `<g transform="translate(${String(iconX)} ${String(iconY)}) scale(${String(iconScale)})" color="${foreground}">`,
+    icon.innerSvg,
+    `</g>`,
   ].join('');
 }

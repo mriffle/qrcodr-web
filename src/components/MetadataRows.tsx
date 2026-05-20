@@ -1,12 +1,16 @@
+import { useEffect, useId, useRef, useState } from 'react';
 import type { QrResult, QrStyle } from '../lib/qr';
+import { CENTER_ICONS, type CenterIconDef } from '../lib/center-icons';
 
 type Props = {
   qr: QrResult | null;
   rawPayload: string;
   style: QrStyle;
+  centerIcon: CenterIconDef;
   onForegroundChange: (next: string) => void;
   onBackgroundChange: (next: string) => void;
   onModuleShapeChange: (next: QrStyle['moduleShape']) => void;
+  onCenterIconChange: (next: CenterIconDef) => void;
 };
 
 /**
@@ -17,9 +21,11 @@ export function MetadataRows({
   qr,
   rawPayload,
   style,
+  centerIcon,
   onForegroundChange,
   onBackgroundChange,
   onModuleShapeChange,
+  onCenterIconChange,
 }: Props) {
   const trimmed = rawPayload.trim();
   return (
@@ -52,6 +58,12 @@ export function MetadataRows({
       <SwatchRow label="Foreground" color={style.foreground} onChange={onForegroundChange} />
       <SwatchRow label="Background" color={style.background} onChange={onBackgroundChange} />
       <ShapeRow shape={style.moduleShape} onChange={onModuleShapeChange} />
+      <CenterIconRow
+        value={centerIcon}
+        foreground={style.foreground}
+        background={style.background}
+        onChange={onCenterIconChange}
+      />
     </section>
   );
 }
@@ -123,6 +135,121 @@ function Row({
       <span className="telemetry__label">{label}</span>
       <span className={valueClass}>{value}</span>
     </div>
+  );
+}
+
+function CenterIconRow({
+  value,
+  foreground,
+  background,
+  onChange,
+}: {
+  value: CenterIconDef;
+  foreground: string;
+  background: string;
+  onChange: (next: CenterIconDef) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const menuId = useId();
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDocPointer = (e: PointerEvent) => {
+      if (!rootRef.current) return;
+      if (!rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onDocPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDocPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="telemetry__row telemetry__row--icon" data-label="Center icon" ref={rootRef}>
+      <span className="telemetry__label">Center icon</span>
+      <span className="icon-picker">
+        <span className="telemetry__value">{value.label}</span>
+        <button
+          type="button"
+          className="icon-picker__trigger"
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-controls={menuId}
+          aria-label={`Pick center icon (current ${value.label})`}
+          title="Pick center icon"
+          data-testid="center-icon-trigger"
+          onClick={() => {
+            setOpen((o) => !o);
+          }}
+        >
+          <IconGlyph icon={value} foreground={foreground} background={background} />
+        </button>
+        {open && (
+          <div
+            id={menuId}
+            className="icon-picker__menu"
+            role="dialog"
+            aria-label="Center icon options"
+          >
+            <div className="icon-picker__grid">
+              {CENTER_ICONS.map((icon) => (
+                <button
+                  key={icon.id}
+                  type="button"
+                  className="icon-picker__option"
+                  data-active={icon.id === value.id}
+                  aria-pressed={icon.id === value.id}
+                  data-testid={`center-icon-option-${icon.id}`}
+                  onClick={() => {
+                    onChange(icon);
+                    setOpen(false);
+                  }}
+                  title={icon.label}
+                >
+                  <IconGlyph icon={icon} foreground={foreground} background={background} />
+                  <span className="icon-picker__option-label">{icon.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </span>
+    </div>
+  );
+}
+
+function IconGlyph({
+  icon,
+  foreground,
+  background,
+}: {
+  icon: CenterIconDef;
+  foreground: string;
+  background: string;
+}) {
+  if (icon.innerSvg.length === 0) {
+    return (
+      <span className="icon-glyph icon-glyph--none" style={{ background }} aria-hidden="true">
+        <span className="icon-glyph__strike" />
+      </span>
+    );
+  }
+  return (
+    <span className="icon-glyph" style={{ background, color: foreground }} aria-hidden="true">
+      <svg
+        viewBox="0 0 24 24"
+        width="100%"
+        height="100%"
+        focusable="false"
+        dangerouslySetInnerHTML={{ __html: icon.innerSvg }}
+      />
+    </span>
   );
 }
 

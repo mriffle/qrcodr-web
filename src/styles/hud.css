@@ -318,6 +318,11 @@
   border: var(--hair) solid var(--onyx-edge);
   padding: 0.85rem 0;
   position: relative;
+  /* Lift the stacking context above the .drawer footer — the entry animation
+     applies a filter/transform on every panel, which creates an implicit
+     stacking context per panel. Without this, the icon-picker popover gets
+     painted under the drawer because .drawer sits last in document order. */
+  z-index: 5;
 }
 
 .telemetry__title {
@@ -447,6 +452,203 @@
   .swatch:hover,
   .swatch:focus-within {
     transform: none;
+  }
+}
+
+/* === Center-icon picker === */
+.telemetry__row--icon {
+  align-items: center;
+}
+
+.icon-picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  justify-self: end;
+}
+
+.icon-picker__trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  padding: 3px;
+  flex: 0 0 auto;
+  background: var(--onyx-rise);
+  border: var(--hair) solid var(--bone-mute);
+  outline: var(--hair) solid var(--onyx-void);
+  outline-offset: 1px;
+  cursor: pointer;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease,
+    border-color 120ms ease;
+}
+
+.icon-picker__trigger:hover,
+.icon-picker__trigger[aria-expanded='true'] {
+  border-color: var(--lime);
+  box-shadow:
+    0 0 0 1px var(--onyx-void),
+    0 0 8px var(--lime-glow);
+  transform: translateY(-1px);
+}
+
+.icon-picker__trigger:focus-visible {
+  outline: 2px solid var(--lime);
+  outline-offset: 3px;
+}
+
+.icon-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--lime);
+}
+
+.icon-glyph svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.icon-glyph--none {
+  position: relative;
+  color: var(--bone-mute);
+}
+
+.icon-glyph__strike {
+  position: absolute;
+  inset: 22%;
+  border: var(--hair) dashed currentColor;
+  opacity: 0.7;
+}
+
+.icon-picker__menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: -0.4rem;
+  z-index: 20;
+  width: min(280px, 16.5rem);
+  padding: 0.55rem;
+  background: var(--onyx-rise);
+  border: var(--hair) solid var(--onyx-edge);
+  border-top: var(--rule) solid var(--lime);
+  box-shadow:
+    0 18px 38px rgba(0, 0, 0, 0.55),
+    0 0 18px rgba(182, 255, 31, 0.12);
+  animation: hud-rise 180ms var(--ease-out) both;
+}
+
+.icon-picker__menu::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  right: 1rem;
+  width: 10px;
+  height: 10px;
+  background: var(--onyx-rise);
+  border-left: var(--hair) solid var(--onyx-edge);
+  border-top: var(--rule) solid var(--lime);
+  transform: rotate(45deg);
+}
+
+.icon-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.28rem;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.icon-picker__option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.18rem;
+  padding: 0.35rem 0.18rem 0.28rem;
+  background: var(--onyx);
+  border: var(--hair) solid var(--onyx-edge);
+  color: var(--bone-mute);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    color 120ms ease,
+    transform 120ms ease;
+}
+
+.icon-picker__option .icon-glyph {
+  width: 1.6rem;
+  height: 1.6rem;
+}
+
+.icon-picker__option:hover,
+.icon-picker__option:focus-visible {
+  border-color: var(--lime);
+  color: var(--bone);
+  transform: translateY(-1px);
+}
+
+.icon-picker__option:focus-visible {
+  outline: 2px solid var(--lime);
+  outline-offset: 2px;
+}
+
+.icon-picker__option[data-active='true'] {
+  border-color: var(--lime);
+  color: var(--lime);
+  box-shadow: inset 0 0 0 1px var(--lime-trace);
+}
+
+.icon-picker__option[data-active='true'] .icon-glyph {
+  color: var(--lime);
+}
+
+.icon-picker__option-label {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-picker__trigger,
+  .icon-picker__option {
+    transition: none;
+  }
+  .icon-picker__trigger:hover,
+  .icon-picker__option:hover {
+    transform: none;
+  }
+  .icon-picker__menu {
+    animation: none;
+  }
+}
+
+@media (max-width: 920px) {
+  .icon-picker {
+    justify-self: start;
+  }
+  .icon-picker__menu {
+    right: auto;
+    left: 0;
+  }
+  .icon-picker__menu::before {
+    right: auto;
+    left: 1rem;
   }
 }
 

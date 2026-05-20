@@ -6,16 +6,25 @@ import { MetadataRows } from './components/MetadataRows';
 import { ExportRow } from './components/ExportRow';
 import { validatePayload } from './lib/payload';
 import { DEFAULT_STYLE, generateQr, type QrResult, type QrStyle } from './lib/qr';
+import { NONE_ICON, type CenterIconDef } from './lib/center-icons';
 
 export function App() {
   const [rawPayload, setRawPayload] = useState('https://example.com');
   const [foreground, setForeground] = useState(DEFAULT_STYLE.foreground);
   const [background, setBackground] = useState(DEFAULT_STYLE.background);
   const [moduleShape, setModuleShape] = useState<QrStyle['moduleShape']>(DEFAULT_STYLE.moduleShape);
+  const [centerIcon, setCenterIcon] = useState<CenterIconDef>(NONE_ICON);
 
-  const style = useMemo(
-    () => ({ ...DEFAULT_STYLE, foreground, background, moduleShape }),
-    [foreground, background, moduleShape],
+  const style = useMemo<QrStyle>(
+    () => ({
+      ...DEFAULT_STYLE,
+      foreground,
+      background,
+      moduleShape,
+      centerIcon:
+        centerIcon.id === 'none' ? null : { id: centerIcon.id, innerSvg: centerIcon.innerSvg },
+    }),
+    [foreground, background, moduleShape, centerIcon],
   );
 
   const validation = useMemo(() => validatePayload(rawPayload), [rawPayload]);
@@ -45,9 +54,11 @@ export function App() {
           qr={qr}
           rawPayload={rawPayload}
           style={style}
+          centerIcon={centerIcon}
           onForegroundChange={setForeground}
           onBackgroundChange={setBackground}
           onModuleShapeChange={setModuleShape}
+          onCenterIconChange={setCenterIcon}
         />
       </div>
 

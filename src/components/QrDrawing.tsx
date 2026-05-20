@@ -1,4 +1,11 @@
-import { QUIET_ZONE, qrToSvgPath, shapeRenderingFor, type QrResult, type QrStyle } from '../lib/qr';
+import {
+  QUIET_ZONE,
+  centerIconLayout,
+  qrToSvgPath,
+  shapeRenderingFor,
+  type QrResult,
+  type QrStyle,
+} from '../lib/qr';
 
 type Props = {
   qr: QrResult | null;
@@ -49,6 +56,9 @@ export function QrDrawing({ qr, style }: Props) {
   const total = size + QUIET_ZONE * 2;
   const d = qrToSvgPath(matrix, size, version, style);
   const shapeRendering = shapeRenderingFor(style);
+  const overlay =
+    style.centerIcon && style.centerIcon.innerSvg.length > 0 ? style.centerIcon : null;
+  const layout = overlay ? centerIconLayout(size) : null;
 
   return (
     <div
@@ -67,6 +77,22 @@ export function QrDrawing({ qr, style }: Props) {
         >
           <rect x={0} y={0} width={total} height={total} fill={style.background} />
           <path d={d} fill={style.foreground} />
+          {overlay && layout && (
+            <>
+              <rect
+                x={layout.padX}
+                y={layout.padY}
+                width={layout.padSize}
+                height={layout.padSize}
+                fill={style.background}
+              />
+              <g
+                transform={`translate(${String(layout.iconX)} ${String(layout.iconY)}) scale(${String(layout.iconScale)})`}
+                color={style.foreground}
+                dangerouslySetInnerHTML={{ __html: overlay.innerSvg }}
+              />
+            </>
+          )}
         </svg>
       </div>
     </div>

@@ -11,6 +11,9 @@ playwright-report
 test-results
 .playwright
 
+# local scratch (icon render previews, etc.)
+tmp
+
 # editor / OS
 .vscode/*
 !.vscode/extensions.json
