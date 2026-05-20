@@ -11,6 +11,10 @@ const PNG_OUTPUT_SIZE = 1024;
 
 type Pending = 'png' | 'svg' | null;
 
+/**
+ * Export drawer — parallelogram action chips for PNG / SVG export.
+ * Lime sigil for PNG, coral for SVG.
+ */
 export function ExportRow({ qr, style }: Props) {
   const [pending, setPending] = useState<Pending>(null);
 
@@ -43,14 +47,14 @@ export function ExportRow({ qr, style }: Props) {
   const disabled = qr === null;
 
   return (
-    <footer className="export-row" aria-label="Export actions">
-      <div className="export-row__label">
-        <span className="export-row__diamond" aria-hidden="true">
-          ◇
+    <footer className="drawer" aria-label="Export actions">
+      <div className="drawer__legend">
+        <span className="drawer__legend-title">Eject :: Artifact</span>
+        <span className="drawer__legend-sub">
+          {disabled ? 'No payload locked' : 'Ready · 2 formats'}
         </span>
-        <span>Export</span>
       </div>
-      <div className="export-row__actions">
+      <div className="drawer__actions">
         <button
           type="button"
           className="export-button"
@@ -61,10 +65,10 @@ export function ExportRow({ qr, style }: Props) {
           data-format="png"
           data-testid="export-png"
         >
-          <span className="export-button__chevron" aria-hidden="true">
+          <span className="export-button__sigil" aria-hidden="true">
             ▸
           </span>
-          <span>{pending === 'png' ? 'Rasterizing…' : 'PNG'}</span>
+          <span>{pending === 'png' ? 'Rasterizing' : 'PNG · 1024'}</span>
         </button>
         <button
           type="button"
@@ -74,10 +78,10 @@ export function ExportRow({ qr, style }: Props) {
           data-format="svg"
           data-testid="export-svg"
         >
-          <span className="export-button__chevron" aria-hidden="true">
-            ▸
+          <span className="export-button__sigil" aria-hidden="true">
+            ◆
           </span>
-          <span>{pending === 'svg' ? 'Writing…' : 'SVG'}</span>
+          <span>{pending === 'svg' ? 'Writing' : 'SVG · vector'}</span>
         </button>
       </div>
     </footer>

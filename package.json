@@ -20,8 +20,8 @@
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run test"
   },
   "dependencies": {
-    "@fontsource/ibm-plex-serif": "^5.2.5",
-    "@fontsource/space-mono": "^5.2.5",
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@fontsource/orbitron": "^5.2.8",
     "motion": "^12.0.0",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",

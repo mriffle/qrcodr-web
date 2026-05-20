@@ -1,40 +1,57 @@
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
 
-const DOC_NUMBER = 'DWG·001';
-const REVISION = 'REV.A';
+const NODE_ID = 'NODE-77A';
+const CHANNEL = 'CH·02';
 
-function formatToday(): string {
-  const d = new Date();
+function formatStamp(d: Date): string {
   const yy = String(d.getFullYear()).slice(2);
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
-  return `${yy}.${mm}.${dd}`;
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return `${yy}.${mm}.${dd}/${hh}:${mi}:${ss}`;
 }
 
+/**
+ * The HUD masthead — system banner for the operative terminal.
+ * Shows the brand sigil, a live UTC-style timestamp, and channel info.
+ */
 export function TitleBlock() {
-  const date = useMemo(formatToday, []);
+  const [stamp, setStamp] = useState(() => formatStamp(new Date()));
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setStamp(formatStamp(new Date()));
+    }, 1000);
+    return () => {
+      window.clearInterval(id);
+    };
+  }, []);
+
   return (
-    <header className="title-block" aria-label="Document title block">
-      <div className="title-block__cell">
-        <span className="title-block__label">DWG</span>
-        <span className="title-block__value">{DOC_NUMBER}</span>
-      </div>
-      <div className="title-block__cell title-block__cell--title">
-        <span className="title-block__title">qrcodr</span>
-      </div>
-      <div className="title-block__cell">
-        <span className="title-block__label">Rev</span>
-        <span className="title-block__value">{REVISION}</span>
-      </div>
-      <div className="title-block__cell">
-        <span className="title-block__label">Date</span>
-        <span className="title-block__value" data-testid="title-date">
-          {date}
+    <header className="masthead" aria-label="System banner">
+      <div className="masthead__brand">
+        <span className="masthead__sigil">
+          QRCODR<span>//</span>
         </span>
+        <span className="masthead__tagline">Operative // QR forge</span>
       </div>
-      <div className="title-block__cell">
-        <span className="title-block__label">Pg</span>
-        <span className="title-block__value">1/1</span>
+      <div />
+      <div className="masthead__channel" aria-label="System status">
+        <span className="masthead__chunk">
+          Node <strong>{NODE_ID}</strong>
+        </span>
+        <span className="masthead__chunk">
+          Chan <strong>{CHANNEL}</strong>
+        </span>
+        <span className="masthead__chunk" data-testid="title-date">
+          <strong>{stamp}</strong>
+        </span>
+        <span className="masthead__chunk">
+          <span className="masthead__pulse" aria-hidden="true" />
+          <span className="masthead__live">Live</span>
+        </span>
       </div>
     </header>
   );

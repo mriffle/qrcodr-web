@@ -1,35 +1,50 @@
-@import '@fontsource/ibm-plex-serif/400.css';
-@import '@fontsource/ibm-plex-serif/500.css';
-@import '@fontsource/ibm-plex-serif/600.css';
-@import '@fontsource/space-mono/400.css';
-@import '@fontsource/space-mono/700.css';
+@import '@fontsource/orbitron/400.css';
+@import '@fontsource/orbitron/500.css';
+@import '@fontsource/orbitron/700.css';
+@import '@fontsource/orbitron/900.css';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+@import '@fontsource/jetbrains-mono/700.css';
 
 :root {
-  /* === palette === */
-  --cobalt: #0f1b3d;
-  --cobalt-deep: #0a1530;
-  --cobalt-veil: rgba(240, 237, 226, 0.045);
-  --chalk: #f0ede2;
-  --chalk-strong: #fffef6;
-  --chalk-dim: rgba(240, 237, 226, 0.55);
-  --chalk-mute: rgba(240, 237, 226, 0.32);
-  --chalk-veil: rgba(240, 237, 226, 0.14);
-  --signal: #ffd60a;
-  --signal-soft: rgba(255, 214, 10, 0.85);
-  --redline: #e2725b;
-  --ink: #0b0f1f;
+  /* === Cyberpunk palette: vantablack + acid lime + hot coral === */
+  --onyx-void: #04060a; /* deepest, page background bottom */
+  --onyx-deep: #07090f; /* primary page surface */
+  --onyx: #0b0f17; /* card / panel surface */
+  --onyx-rise: #11161f; /* raised surface */
+  --onyx-edge: #1c2230; /* hairline borders */
+  --onyx-glow: rgba(170, 255, 0, 0.04); /* faint lime atmospheric wash */
 
-  /* === type === */
-  --font-mono: 'Space Mono', ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
-  --font-serif: 'IBM Plex Serif', Cambria, 'Georgia', 'Times New Roman', serif;
+  --bone: #e9efe2; /* primary readable text */
+  --bone-dim: rgba(233, 239, 226, 0.62);
+  --bone-mute: rgba(233, 239, 226, 0.38);
+  --bone-veil: rgba(233, 239, 226, 0.12);
 
-  /* === metrics === */
-  --rule: 1px;
-  --rule-strong: 2px;
+  --lime: #b6ff1f; /* acid lime — primary signal */
+  --lime-soft: rgba(182, 255, 31, 0.85);
+  --lime-glow: rgba(182, 255, 31, 0.35);
+  --lime-trace: rgba(182, 255, 31, 0.18);
+
+  --coral: #ff4f5e; /* hot coral — danger / error / accent */
+  --coral-soft: rgba(255, 79, 94, 0.85);
+  --coral-glow: rgba(255, 79, 94, 0.32);
+
+  /* === Type === */
+  --font-display: 'Orbitron', 'JetBrains Mono', ui-monospace, monospace;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* === Metrics === */
+  --hair: 1px;
+  --rule: 2px;
   --gutter: 1rem;
   --gutter-lg: 1.75rem;
-  --label-size: 0.68rem;
-  --label-track: 0.14em;
+  --gutter-xl: 2.5rem;
+  --label-size: 0.66rem;
+  --label-track: 0.28em;
+
+  /* === Motion === */
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-snap: cubic-bezier(0.7, 0, 0.1, 1);
 }
 
 *,
@@ -47,28 +62,64 @@ body,
 }
 
 html {
-  background-color: var(--cobalt);
+  background-color: var(--onyx-void);
 }
 
 body {
-  background-color: var(--cobalt);
+  background-color: var(--onyx-void);
+  /* Layered atmosphere: faint lime wash from top-left, coral spark top-right,
+     and a vertical falloff into pure void at the bottom. */
   background-image:
-    linear-gradient(to right, var(--cobalt-veil) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--cobalt-veil) 1px, transparent 1px);
-  background-size: 24px 24px;
-  background-position: -1px -1px;
-  color: var(--chalk);
+    radial-gradient(ellipse 60% 50% at 12% 8%, rgba(182, 255, 31, 0.07), transparent 70%),
+    radial-gradient(ellipse 40% 35% at 92% 5%, rgba(255, 79, 94, 0.05), transparent 70%),
+    linear-gradient(to bottom, var(--onyx-deep) 0%, var(--onyx-void) 100%);
+  background-attachment: fixed;
+  color: var(--bone);
   font-family: var(--font-mono);
   font-size: 13px;
-  line-height: 1.45;
-  letter-spacing: 0.02em;
+  line-height: 1.55;
+  letter-spacing: 0.01em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* CRT scanlines — 6% opacity horizontal lines, fixed, non-interactive */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 2px,
+    rgba(0, 0, 0, 0.18) 3px,
+    transparent 4px
+  );
+  mix-blend-mode: multiply;
+  opacity: 0.55;
+  z-index: 1000;
+}
+
+/* Soft CRT vignette */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+  z-index: 1001;
 }
 
 ::selection {
-  background: var(--signal);
-  color: var(--cobalt);
+  background: var(--lime);
+  color: var(--onyx-void);
+}
+
+::-moz-selection {
+  background: var(--lime);
+  color: var(--onyx-void);
 }
 
 button,
@@ -78,4 +129,15 @@ select {
   font: inherit;
   letter-spacing: inherit;
   color: inherit;
+}
+
+:focus {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before {
+    /* still show scanlines but no anim */
+    opacity: 0.35;
+  }
 }

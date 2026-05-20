@@ -106,23 +106,48 @@ These are valid TS techniques in other contexts but overkill here. Don't introdu
 
 ## Aesthetic direction
 
-### Project direction: "Apparatus"
+### Project direction: "HUD" (cyberpunk operative)
 
-Engineering blueprint / drafting document. Cobalt blueprint background (`--cobalt` `#0F1B3D`), chalk drafting-paper QR card (`--chalk` `#F0EDE2`), signal-yellow accents (`--signal` `#FFD60A`). Type pairing: **IBM Plex Serif** (title block, display) + **Space Mono** (body, mono), self-hosted via `@fontsource/*`. Tokens in `src/styles/tokens.css`, layout in `src/styles/apparatus.css`.
+A near-future operative terminal — dense, charged, intentionally cyberpunk. Replaced the original "Apparatus" engineering-blueprint direction on 2026-05-20.
 
-Do not drift toward generic dashboard / dev-tool styling. If a new element doesn't have an Apparatus interpretation, design one (errors as redline annotations, loading as ink filling in, version stamps in title-block cells, etc.).
+**Palette** (tokens in `src/styles/tokens.css`):
+
+- `--onyx-void` `#04060A` / `--onyx-deep` `#07090F` / `--onyx` `#0B0F17` / `--onyx-rise` `#11161F` / `--onyx-edge` `#1C2230` — the dark surfaces
+- `--bone` `#E9EFE2` — primary readable text (NOT pure white — slightly warm)
+- `--lime` `#B6FF1F` — acid lime, the primary signal accent (caret, sigil, PNG export, lock state)
+- `--coral` `#FF4F5E` — hot coral, danger/error/SVG export
+
+The page background is a layered radial gradient (faint lime wash top-left + coral spark top-right + vertical falloff into pure void) with two atmospheric overlays: CRT scanlines (`body::before`) and a vignette (`body::after`).
+
+**Type pairing**:
+
+- **Orbitron** (display) — masthead sigil, button caps, labels. `@fontsource/orbitron`
+- **JetBrains Mono** (body, mono) — payload prompt, telemetry values, everything else. `@fontsource/jetbrains-mono`
+
+**Layout** in `src/styles/hud.css`:
+
+- `.masthead` — full-width system banner with brand sigil + live UTC-style timestamp + Node/Channel/Live status
+- `.console` — left-rail input + telemetry
+- `.stage` — viewport with HUD corner brackets + reticle crosshair + soft lime bloom around the QR
+- `.drawer` — bottom export bar with parallelogram-clipped action chips
+- Collapses to single column under 920px
+
+**Memorable hook**: the QR sits inside a viewport with HUD corner brackets and a reticle, lime bloom radiating from a white module square. The masthead has a live ticking timestamp + pulsing "Live" dot. Payload input reads as a terminal prompt (`./forge >`) with a blinking lime caret.
+
+Do not drift toward generic dashboard / dev-tool styling. If a new element doesn't have a HUD interpretation, design one (loading as a lock-acquire sweep, errors as a coral system alert, success as a lime confirm chime, etc.).
 
 ### Durable design rules (apply to any new UI work)
 
 These hold regardless of feature. Violations should feel obviously wrong against this codebase.
 
 - **No generic AI defaults.** Banned fonts: **Inter, Roboto, Arial, system fonts, Space Grotesk**. Banned palettes: **purple gradients on white**, evenly-distributed timid color schemes.
-- **Type pairing matters.** Use a distinctive display font + a refined body/mono font. The current pairing is IBM Plex Serif + Space Mono — keep it cohesive; don't add a third typeface without a real reason.
-- **Color discipline.** Dominant colors with sharp accents, not even distribution. The Apparatus accent is the signal-yellow `--signal` — use it sparingly for emphasis (caret, glyphs, hover state). New colors go through `tokens.css` as CSS custom properties, never inline hex.
-- **Layout.** Prefer asymmetry, controlled density, and grid-breaking over predictable component grids. The title block + dimension lines are the existing examples.
-- **Backgrounds.** Atmosphere, not flat fills. The body uses a grid-paper repeating-gradient over cobalt; new background regions should add texture, layered transparency, or a hairline border rather than a solid block.
-- **Motion.** Prefer CSS-only motion (already in use via the staggered `.apparatus > *` reveal). For richer interaction-driven animation, use the **Motion** library (`motion` is already a dependency) — don't reach for Framer Motion (deprecated import path) or hand-rolled `requestAnimationFrame`. Respect `prefers-reduced-motion`.
-- **Implementation matches intent.** Apparatus is a _precision_ aesthetic, not a maximalist one — every line, padding value, and label deserves intentionality. Loose spacing or default browser styling reads as a regression here.
+- **Type pairing matters.** A strong display font + a crisp mono body. The current pairing is Orbitron + JetBrains Mono — keep it cohesive; don't add a third typeface without a real reason.
+- **Color discipline.** Dominant onyx with sharp lime + coral accents. The lime is the primary "system live / OK" signal — use it sparingly for emphasis (caret, sigil, lock state). Coral is for danger/error and the SVG action only. New colors go through `tokens.css` as CSS custom properties, never inline hex.
+- **Layout.** Asymmetry and controlled density. The masthead + console + stage + drawer composition is the existing example. Avoid centered single-column dashboard layouts.
+- **Backgrounds.** Atmosphere, not flat fills. The body uses layered radial gradients + scanlines + vignette. New raised panels should use `--onyx-rise` with a `--onyx-edge` hairline, not a different solid color.
+- **Motion.** Prefer CSS for ambient effects (scanlines, caret blink, pulse dot). For richer interaction-driven animation, use the **Motion** library (`motion` is already a dependency) — don't reach for Framer Motion (deprecated import path) or hand-rolled `requestAnimationFrame`. Always respect `prefers-reduced-motion` — disable scanlines/glitch/pulse for users who opt out (see existing `@media (prefers-reduced-motion: reduce)` blocks in `hud.css`).
+- **Accessibility under cyberpunk.** Neon doesn't excuse poor contrast or invisible focus rings. Verify WCAG AA on text colors (lime on onyx-void passes; lime on onyx-rise needs eyeballing). Focus rings use a visible lime outline.
+- **Implementation matches intent.** This is a committed-cyberpunk aesthetic, not "vaguely techy." Every element should feel deliberately operative — terminal labels (`./forge >`, `Eject :: Artifact`), telemetry-style metadata, sigils not bullet points.
 
 ## Relationship to the Python app
 

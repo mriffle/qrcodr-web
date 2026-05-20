@@ -44,10 +44,10 @@ const TEST_PAYLOADS = [
 ] as const;
 
 test.describe('qrcodr-web · UI behavior', () => {
-  test('renders the title block on load', async ({ page }) => {
+  test('renders the masthead on load', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByText('qrcodr')).toBeVisible();
-    await expect(page.getByText('DWG·001')).toBeVisible();
+    await expect(page.getByText('QRCODR', { exact: false })).toBeVisible();
+    await expect(page.getByText('NODE-77A')).toBeVisible();
     await expect(page.getByTestId('title-date')).toBeVisible();
   });
 
@@ -55,7 +55,7 @@ test.describe('qrcodr-web · UI behavior', () => {
     await page.goto('/');
     const input = page.getByTestId('payload-input');
     await input.fill('https://anthropic.com');
-    await expect(page.locator('.qr-drawing[data-modules]')).toBeVisible();
+    await expect(page.locator('.qr-frame[data-modules]')).toBeVisible();
   });
 
   test('empty payload disables export buttons and shows error', async ({ page }) => {
@@ -73,7 +73,7 @@ test.describe('qrcodr-web · UI behavior', () => {
     await input.fill('');
     await expect(page.locator('[data-empty="true"]')).toBeVisible();
     await input.fill('hello');
-    await expect(page.locator('.qr-drawing[data-modules]')).toBeVisible();
+    await expect(page.locator('.qr-frame[data-modules]')).toBeVisible();
   });
 });
 

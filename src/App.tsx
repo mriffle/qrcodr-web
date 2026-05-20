@@ -23,14 +23,35 @@ export function App() {
 
   const error = validation.ok ? null : validation.error;
 
+  const stageReadout = qr
+    ? `Lock acquired :: v${String(qr.version)} · ${String(qr.size)}×${String(qr.size)} mod`
+    : 'Standby :: awaiting payload';
+
   return (
-    <main className="apparatus">
+    <main className="deck">
       <TitleBlock />
-      <PayloadInput value={rawPayload} onChange={setRawPayload} error={error} />
-      <section className="qr-stage" aria-label="QR preview">
+
+      <div className="console">
+        <PayloadInput value={rawPayload} onChange={setRawPayload} error={error} />
+        <MetadataRows qr={qr} rawPayload={rawPayload} style={DEFAULT_STYLE} />
+      </div>
+
+      <section
+        className="stage"
+        aria-label="QR preview viewport"
+        data-state={qr ? 'lock' : 'standby'}
+      >
+        <span className="stage__crosshair" aria-hidden="true" />
+        <span className="stage__bracket stage__bracket--tl" aria-hidden="true" />
+        <span className="stage__bracket stage__bracket--tr" aria-hidden="true" />
+        <span className="stage__bracket stage__bracket--bl" aria-hidden="true" />
+        <span className="stage__bracket stage__bracket--br" aria-hidden="true" />
+        <span className={qr ? 'stage__readout' : 'stage__readout stage__readout--coral'}>
+          {stageReadout}
+        </span>
         <QrDrawing qr={qr} style={DEFAULT_STYLE} />
       </section>
-      <MetadataRows qr={qr} rawPayload={rawPayload} style={DEFAULT_STYLE} />
+
       <ExportRow qr={qr} style={DEFAULT_STYLE} />
     </main>
   );
