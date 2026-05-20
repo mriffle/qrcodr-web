@@ -86,13 +86,18 @@ describe('qrToSvgString', () => {
     expect(svg).toContain('fill="#123456"');
   });
 
-  test('module rect count equals number of on-cells in the matrix', () => {
+  test('modules are emitted as a single <path> with one subpath per on-cell', () => {
+    // Adjacent <rect>s produce sub-pixel seams when rasterized to PNG;
+    // a single path has no internal edges. Enforce the structural choice.
     const qr = generateQr(valid('https://example.com'));
     const svg = qrToSvgString(qr, DEFAULT_STYLE);
     const onCells = Array.from(qr.matrix).filter((v) => v === 1).length;
-    const rectMatches = svg.match(/<rect/g) ?? [];
-    // 1 background rect + N module rects
-    expect(rectMatches.length).toBe(onCells + 1);
+    const rectCount = (svg.match(/<rect/g) ?? []).length;
+    const pathCount = (svg.match(/<path/g) ?? []).length;
+    expect(rectCount).toBe(1); // background only
+    expect(pathCount).toBe(1); // modules
+    const moveCommands = (svg.match(/M\d/g) ?? []).length;
+    expect(moveCommands).toBe(onCells);
   });
 
   test('output is deterministic for the same payload', () => {

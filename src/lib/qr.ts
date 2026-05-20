@@ -61,19 +61,23 @@ export function generateQr(payload: ValidatedPayload): QrResult {
 export function qrToSvgString(qr: QrResult, style: QrStyle): string {
   const { matrix, size } = qr;
   const total = size + QUIET_ZONE * 2;
-  const modules: string[] = [];
+  // Emit modules as a single <path> with one subpath per on-cell, NOT as
+  // adjacent <rect> elements. Separate rects' edges get antialiased
+  // independently when the SVG is rasterized to PNG, leaving faint
+  // sub-pixel seams between modules. A single path has no internal edges.
+  const subpaths: string[] = [];
   for (let y = 0; y < size; y++) {
     const rowOffset = y * size;
     for (let x = 0; x < size; x++) {
       if (matrix[rowOffset + x] === 1) {
-        modules.push(`<rect x="${QUIET_ZONE + x}" y="${QUIET_ZONE + y}" width="1" height="1"/>`);
+        subpaths.push(`M${QUIET_ZONE + x},${QUIET_ZONE + y}h1v1h-1z`);
       }
     }
   }
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${total} ${total}" shape-rendering="crispEdges">`,
     `<rect width="${total}" height="${total}" fill="${style.background}"/>`,
-    `<g fill="${style.foreground}">${modules.join('')}</g>`,
+    `<path fill="${style.foreground}" d="${subpaths.join('')}"/>`,
     `</svg>`,
   ].join('');
 }
