@@ -5,16 +5,17 @@ import { QrDrawing } from './components/QrDrawing';
 import { MetadataRows } from './components/MetadataRows';
 import { ExportRow } from './components/ExportRow';
 import { validatePayload } from './lib/payload';
-import { DEFAULT_STYLE, generateQr, type QrResult } from './lib/qr';
+import { DEFAULT_STYLE, generateQr, type QrResult, type QrStyle } from './lib/qr';
 
 export function App() {
   const [rawPayload, setRawPayload] = useState('https://example.com');
   const [foreground, setForeground] = useState(DEFAULT_STYLE.foreground);
   const [background, setBackground] = useState(DEFAULT_STYLE.background);
+  const [moduleShape, setModuleShape] = useState<QrStyle['moduleShape']>(DEFAULT_STYLE.moduleShape);
 
   const style = useMemo(
-    () => ({ ...DEFAULT_STYLE, foreground, background }),
-    [foreground, background],
+    () => ({ ...DEFAULT_STYLE, foreground, background, moduleShape }),
+    [foreground, background, moduleShape],
   );
 
   const validation = useMemo(() => validatePayload(rawPayload), [rawPayload]);
@@ -46,6 +47,7 @@ export function App() {
           style={style}
           onForegroundChange={setForeground}
           onBackgroundChange={setBackground}
+          onModuleShapeChange={setModuleShape}
         />
       </div>
 

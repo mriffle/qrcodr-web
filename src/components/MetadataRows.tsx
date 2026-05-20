@@ -6,6 +6,7 @@ type Props = {
   style: QrStyle;
   onForegroundChange: (next: string) => void;
   onBackgroundChange: (next: string) => void;
+  onModuleShapeChange: (next: QrStyle['moduleShape']) => void;
 };
 
 /**
@@ -18,6 +19,7 @@ export function MetadataRows({
   style,
   onForegroundChange,
   onBackgroundChange,
+  onModuleShapeChange,
 }: Props) {
   const trimmed = rawPayload.trim();
   return (
@@ -47,17 +49,56 @@ export function MetadataRows({
         muted={!qr}
       />
       <Row label="Quiet zone" value="4 mod" />
-      <SwatchRow
-        label="Foreground"
-        color={style.foreground}
-        onChange={onForegroundChange}
-      />
-      <SwatchRow
-        label="Background"
-        color={style.background}
-        onChange={onBackgroundChange}
-      />
+      <SwatchRow label="Foreground" color={style.foreground} onChange={onForegroundChange} />
+      <SwatchRow label="Background" color={style.background} onChange={onBackgroundChange} />
+      <ShapeRow shape={style.moduleShape} onChange={onModuleShapeChange} />
     </section>
+  );
+}
+
+function ShapeRow({
+  shape,
+  onChange,
+}: {
+  shape: QrStyle['moduleShape'];
+  onChange: (next: QrStyle['moduleShape']) => void;
+}) {
+  return (
+    <div className="telemetry__row telemetry__row--toggle" data-label="Module shape">
+      <span className="telemetry__label">Module shape</span>
+      <span className="telemetry__toggle">
+        <button
+          type="button"
+          className="shape-chip"
+          data-active={shape === 'square'}
+          aria-pressed={shape === 'square'}
+          data-testid="module-shape-square"
+          onClick={() => {
+            onChange('square');
+          }}
+        >
+          <span className="shape-chip__glyph" aria-hidden="true">
+            ▣
+          </span>
+          <span>Square</span>
+        </button>
+        <button
+          type="button"
+          className="shape-chip"
+          data-active={shape === 'rounded'}
+          aria-pressed={shape === 'rounded'}
+          data-testid="module-shape-rounded"
+          onClick={() => {
+            onChange('rounded');
+          }}
+        >
+          <span className="shape-chip__glyph" aria-hidden="true">
+            ●
+          </span>
+          <span>Rounded</span>
+        </button>
+      </span>
+    </div>
   );
 }
 
@@ -106,12 +147,7 @@ function SwatchRow({
           aria-label={`Pick ${label.toLowerCase()} color (current ${hex})`}
           title={`Pick ${label.toLowerCase()} color`}
         >
-          <svg
-            className="swatch__icon"
-            viewBox="0 0 16 16"
-            aria-hidden="true"
-            focusable="false"
-          >
+          <svg className="swatch__icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
             <path
               d="M11.2 1.5a2 2 0 0 1 2.83 2.83l-1.3 1.3-2.83-2.83 1.3-1.3Zm-2 2 2.83 2.83-6.4 6.4-3.06.7a.5.5 0 0 1-.6-.6l.7-3.06 6.53-6.27Z"
               fill="currentColor"

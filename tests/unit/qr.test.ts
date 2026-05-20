@@ -1,5 +1,15 @@
 import { describe, expect, test } from 'vitest';
-import { DEFAULT_STYLE, QUIET_ZONE, generateQr, qrToSvgString } from '../../src/lib/qr';
+import {
+  DEFAULT_STYLE,
+  QUIET_ZONE,
+  generateQr,
+  isAlignmentModule,
+  isFinderModule,
+  isReservedSquare,
+  isTimingModule,
+  qrToSvgString,
+  shouldRoundCorner,
+} from '../../src/lib/qr';
 import { validatePayload, type ValidatedPayload } from '../../src/lib/payload';
 
 function valid(s: string): ValidatedPayload {
@@ -110,5 +120,285 @@ describe('qrToSvgString', () => {
     const qr = generateQr(valid('x'));
     const svg = qrToSvgString(qr, DEFAULT_STYLE);
     expect(svg).toContain('xmlns="http://www.w3.org/2000/svg"');
+  });
+
+  test('square mode declares shape-rendering="crispEdges"', () => {
+    const qr = generateQr(valid('x'));
+    const svg = qrToSvgString(qr, DEFAULT_STYLE);
+    expect(svg).toContain('shape-rendering="crispEdges"');
+  });
+});
+
+describe('isFinderModule', () => {
+  test('detects every cell in the top-left finder', () => {
+    for (let y = 0; y < 7; y++) {
+      for (let x = 0; x < 7; x++) {
+        expect(isFinderModule(x, y, 25)).toBe(true);
+      }
+    }
+  });
+
+  test('detects every cell in the top-right finder', () => {
+    const size = 25;
+    for (let y = 0; y < 7; y++) {
+      for (let x = size - 7; x < size; x++) {
+        expect(isFinderModule(x, y, size)).toBe(true);
+      }
+    }
+  });
+
+  test('detects every cell in the bottom-left finder', () => {
+    const size = 25;
+    for (let y = size - 7; y < size; y++) {
+      for (let x = 0; x < 7; x++) {
+        expect(isFinderModule(x, y, size)).toBe(true);
+      }
+    }
+  });
+
+  test('rejects cells one step outside each finder boundary', () => {
+    const size = 25;
+    expect(isFinderModule(7, 0, size)).toBe(false);
+    expect(isFinderModule(0, 7, size)).toBe(false);
+    expect(isFinderModule(size - 8, 0, size)).toBe(false);
+    expect(isFinderModule(size - 1, 7, size)).toBe(false);
+    expect(isFinderModule(7, size - 1, size)).toBe(false);
+  });
+
+  test('does NOT flag the bottom-right corner — no finder there', () => {
+    expect(isFinderModule(24, 24, 25)).toBe(false);
+    expect(isFinderModule(20, 20, 25)).toBe(false);
+  });
+});
+
+describe('isTimingModule', () => {
+  test('row 6 is timing between the finder gaps, exclusive', () => {
+    const size = 25;
+    expect(isTimingModule(7, 6, size)).toBe(false); // still inside finder neighborhood
+    expect(isTimingModule(8, 6, size)).toBe(true);
+    expect(isTimingModule(size - 9, 6, size)).toBe(true);
+    expect(isTimingModule(size - 8, 6, size)).toBe(false);
+  });
+
+  test('column 6 is timing between the finder gaps, exclusive', () => {
+    const size = 25;
+    expect(isTimingModule(6, 7, size)).toBe(false);
+    expect(isTimingModule(6, 8, size)).toBe(true);
+    expect(isTimingModule(6, size - 9, size)).toBe(true);
+    expect(isTimingModule(6, size - 8, size)).toBe(false);
+  });
+
+  test('non-timing rows/cols return false', () => {
+    expect(isTimingModule(10, 10, 25)).toBe(false);
+    expect(isTimingModule(5, 8, 25)).toBe(false);
+  });
+});
+
+describe('isAlignmentModule', () => {
+  test('version 1 has no alignment patterns', () => {
+    // v1 size = 21. Walk the whole matrix; nothing should be alignment.
+    for (let y = 0; y < 21; y++) {
+      for (let x = 0; x < 21; x++) {
+        expect(isAlignmentModule(x, y, 21, 1)).toBe(false);
+      }
+    }
+  });
+
+  test('version 2 has a single alignment pattern centered at (18, 18)', () => {
+    const size = 25;
+    // 5×5 block centered at (18, 18) → x,y in 16..20
+    expect(isAlignmentModule(18, 18, size, 2)).toBe(true);
+    expect(isAlignmentModule(16, 16, size, 2)).toBe(true);
+    expect(isAlignmentModule(20, 20, size, 2)).toBe(true);
+    expect(isAlignmentModule(15, 18, size, 2)).toBe(false);
+    expect(isAlignmentModule(18, 21, size, 2)).toBe(false);
+  });
+});
+
+describe('isReservedSquare', () => {
+  test('finder cells are reserved', () => {
+    expect(isReservedSquare(0, 0, 25, 2)).toBe(true);
+  });
+
+  test('timing cells are reserved', () => {
+    expect(isReservedSquare(8, 6, 25, 2)).toBe(true);
+  });
+
+  test('alignment cells are reserved (v2+)', () => {
+    expect(isReservedSquare(18, 18, 25, 2)).toBe(true);
+  });
+
+  test('a generic data cell is NOT reserved', () => {
+    // (10, 12) on a v2 code is clearly outside any reserved region.
+    expect(isReservedSquare(10, 12, 25, 2)).toBe(false);
+  });
+});
+
+describe('shouldRoundCorner', () => {
+  // Helper to build a small synthetic matrix from a 2D pattern.
+  const make = (
+    rows: readonly (readonly number[])[],
+  ): {
+    matrix: Uint8Array;
+    size: number;
+  } => {
+    const size = rows.length;
+    const matrix = new Uint8Array(size * size);
+    for (let y = 0; y < size; y++) {
+      const row = rows[y];
+      if (!row) continue;
+      for (let x = 0; x < size; x++) {
+        matrix[y * size + x] = row[x] === 1 ? 1 : 0;
+      }
+    }
+    return { matrix, size };
+  };
+
+  test('an isolated on-module rounds all four corners', () => {
+    const { matrix, size } = make([
+      [0, 0, 0],
+      [0, 1, 0],
+      [0, 0, 0],
+    ]);
+    expect(shouldRoundCorner(matrix, size, 1, 1, 'tl')).toBe(true);
+    expect(shouldRoundCorner(matrix, size, 1, 1, 'tr')).toBe(true);
+    expect(shouldRoundCorner(matrix, size, 1, 1, 'br')).toBe(true);
+    expect(shouldRoundCorner(matrix, size, 1, 1, 'bl')).toBe(true);
+  });
+
+  test('a horizontal pair rounds only the outer corners (merges into a pill)', () => {
+    const { matrix, size } = make([
+      [0, 0, 0, 0],
+      [0, 1, 1, 0],
+      [0, 0, 0, 0],
+    ]);
+    // Left cell: tl/bl round (outer), tr/br don't (right neighbor is on).
+    expect(shouldRoundCorner(matrix, size, 1, 1, 'tl')).toBe(true);
+    expect(shouldRoundCorner(matrix, size, 1, 1, 'bl')).toBe(true);
+    expect(shouldRoundCorner(matrix, size, 1, 1, 'tr')).toBe(false);
+    expect(shouldRoundCorner(matrix, size, 1, 1, 'br')).toBe(false);
+    // Right cell: mirror.
+    expect(shouldRoundCorner(matrix, size, 2, 1, 'tr')).toBe(true);
+    expect(shouldRoundCorner(matrix, size, 2, 1, 'br')).toBe(true);
+    expect(shouldRoundCorner(matrix, size, 2, 1, 'tl')).toBe(false);
+    expect(shouldRoundCorner(matrix, size, 2, 1, 'bl')).toBe(false);
+  });
+
+  test('the concave corner of an L-shape stays unrounded (exterior only)', () => {
+    // L:  [1 0]
+    //     [1 1]
+    // The "corner" cell at (1,1) has the elbow's concave corner at TL —
+    // its left neighbor (0,1) is on AND its top neighbor (1,0) is on, so
+    // TL must NOT round (would carve out the concave angle, which v1 skips).
+    const { matrix, size } = make([
+      [0, 0, 0, 0],
+      [0, 1, 0, 0],
+      [0, 1, 1, 0],
+      [0, 0, 0, 0],
+    ]);
+    expect(shouldRoundCorner(matrix, size, 1, 2, 'tl')).toBe(false);
+    // The bottom-right cell of the L is isolated on its right and bottom,
+    // so BR rounds; TR rounds too (above is off, right is off).
+    expect(shouldRoundCorner(matrix, size, 2, 2, 'br')).toBe(true);
+    expect(shouldRoundCorner(matrix, size, 2, 2, 'tr')).toBe(true);
+  });
+
+  test('out-of-bounds neighbors count as off, so edge cells round their outside corners', () => {
+    const { matrix, size } = make([
+      [1, 0],
+      [0, 0],
+    ]);
+    // (0,0): left and top neighbors are off-grid (treated as 0).
+    expect(shouldRoundCorner(matrix, size, 0, 0, 'tl')).toBe(true);
+    expect(shouldRoundCorner(matrix, size, 0, 0, 'tr')).toBe(true);
+    expect(shouldRoundCorner(matrix, size, 0, 0, 'bl')).toBe(true);
+    expect(shouldRoundCorner(matrix, size, 0, 0, 'br')).toBe(true);
+  });
+});
+
+describe('qrToSvgString — rounded mode', () => {
+  const rounded = (overrides: Partial<typeof DEFAULT_STYLE> = {}) => ({
+    ...DEFAULT_STYLE,
+    moduleShape: 'rounded' as const,
+    ...overrides,
+  });
+
+  test('emits arc commands when moduleShape is rounded', () => {
+    const qr = generateQr(valid('https://example.com'));
+    const svg = qrToSvgString(qr, rounded());
+    // The rounded subpath uses lowercase `a` for relative arcs at r=0.5.
+    expect(svg).toMatch(/a0\.5,0\.5/);
+  });
+
+  test('rounded mode switches shape-rendering to geometricPrecision', () => {
+    const qr = generateQr(valid('https://example.com'));
+    const svg = qrToSvgString(qr, rounded());
+    expect(svg).toContain('shape-rendering="geometricPrecision"');
+    expect(svg).not.toContain('shape-rendering="crispEdges"');
+  });
+
+  test('square mode emits no arc commands', () => {
+    const qr = generateQr(valid('https://example.com'));
+    const svg = qrToSvgString(qr, DEFAULT_STYLE);
+    expect(svg).not.toMatch(/a0\.5,0\.5/);
+  });
+
+  test('still emits exactly one <path> in rounded mode (no antialiasing seams)', () => {
+    const qr = generateQr(valid('https://example.com'));
+    const svg = qrToSvgString(qr, rounded());
+    const pathCount = (svg.match(/<path/g) ?? []).length;
+    expect(pathCount).toBe(1);
+  });
+
+  test('preserves one M per on-cell (each module is still its own subpath)', () => {
+    const qr = generateQr(valid('https://example.com'));
+    const svg = qrToSvgString(qr, rounded());
+    const onCells = Array.from(qr.matrix).filter((v) => v === 1).length;
+    // Match M followed by a digit or sign, just like the square-mode test.
+    const moveCommands = (svg.match(/M[\d-]/g) ?? []).length;
+    expect(moveCommands).toBe(onCells);
+  });
+
+  test('finder pattern subpaths contain no arc commands', () => {
+    // Extract every subpath that starts inside a finder region and assert
+    // none of them are rounded. This is the load-bearing structural check
+    // that scanners' lock-on patterns stay crisp.
+    const qr = generateQr(valid('https://example.com'));
+    const svg = qrToSvgString(qr, rounded());
+    // Pull the `d` attribute.
+    const dMatch = /d="([^"]+)"/.exec(svg);
+    expect(dMatch).not.toBeNull();
+    const d = dMatch?.[1];
+    expect(d).toBeDefined();
+    if (!d) return;
+    // Split on M (subpath starts). Each fragment after split corresponds
+    // to one subpath; reattach the leading M when checking coords.
+    const fragments = d.split('M').filter((s) => s.length > 0);
+    let finderSubpaths = 0;
+    for (const frag of fragments) {
+      // Coords look like "<qx>,<qy>..."; parse the leading "x,y".
+      const coordMatch = /^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/.exec(frag);
+      if (!coordMatch) continue;
+      const qx = Number(coordMatch[1]);
+      const qy = Number(coordMatch[2]);
+      // Reverse the QUIET_ZONE offset to find the matrix-space coords.
+      // Note: rounded subpaths start at (qx + 0.5, qy) for a rounded TL,
+      // so subtract a possible 0.5 to recover the integer module index.
+      const mx = Math.floor(qx) - QUIET_ZONE;
+      const my = Math.floor(qy) - QUIET_ZONE;
+      if (isFinderModule(mx, my, qr.size)) {
+        finderSubpaths++;
+        // Reserved squares should never contain an arc command.
+        expect(frag).not.toContain('a0.5');
+      }
+    }
+    // Sanity: at least the four corners of each of three finders are on.
+    expect(finderSubpaths).toBeGreaterThan(10);
+  });
+
+  test('output is deterministic for the same payload', () => {
+    const a = qrToSvgString(generateQr(valid('repeat-me')), rounded());
+    const b = qrToSvgString(generateQr(valid('repeat-me')), rounded());
+    expect(a).toBe(b);
   });
 });

@@ -1,5 +1,4 @@
-import type { ReactNode } from 'react';
-import { QUIET_ZONE, type QrResult, type QrStyle } from '../lib/qr';
+import { QUIET_ZONE, qrToSvgPath, shapeRenderingFor, type QrResult, type QrStyle } from '../lib/qr';
 
 type Props = {
   qr: QrResult | null;
@@ -10,6 +9,10 @@ type Props = {
  * Renders ONLY the bare scannable QR matrix (plus quiet zone) — no
  * dimension lines, no version stamps, no labels overlaid on the code.
  * Any metadata about the QR is displayed elsewhere in the page.
+ *
+ * Path generation is delegated to `qrToSvgPath` so the preview and the
+ * exported SVG cannot drift apart: any change to module geometry is
+ * picked up by both call sites simultaneously.
  *
  * The on-page lime glow around the QR comes from the parent .qr-frame
  * box-shadow; this component just paints modules on a white square.
@@ -44,25 +47,8 @@ export function QrDrawing({ qr, style }: Props) {
 
   const { matrix, size, version } = qr;
   const total = size + QUIET_ZONE * 2;
-
-  const modules: ReactNode[] = [];
-  for (let y = 0; y < size; y++) {
-    const rowOffset = y * size;
-    for (let x = 0; x < size; x++) {
-      if (matrix[rowOffset + x] === 1) {
-        modules.push(
-          <rect
-            key={`${String(x)}-${String(y)}`}
-            x={QUIET_ZONE + x}
-            y={QUIET_ZONE + y}
-            width={1}
-            height={1}
-            fill={style.foreground}
-          />,
-        );
-      }
-    }
-  }
+  const d = qrToSvgPath(matrix, size, version, style);
+  const shapeRendering = shapeRenderingFor(style);
 
   return (
     <div
@@ -75,18 +61,12 @@ export function QrDrawing({ qr, style }: Props) {
         <svg
           className="qr-drawing__svg"
           viewBox={`0 0 ${String(total)} ${String(total)}`}
-          shapeRendering="crispEdges"
+          shapeRendering={shapeRendering}
           role="img"
           aria-label={`QR code, ${String(size)} by ${String(size)} modules, version ${String(version)}`}
         >
-          <rect
-            x={0}
-            y={0}
-            width={total}
-            height={total}
-            fill={style.background}
-          />
-          <g>{modules}</g>
+          <rect x={0} y={0} width={total} height={total} fill={style.background} />
+          <path d={d} fill={style.foreground} />
         </svg>
       </div>
     </div>
