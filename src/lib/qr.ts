@@ -1,4 +1,5 @@
 import QRCode from 'qrcode';
+import { ORBITRON_BOLD_WOFF2_BASE64 } from '../assets/orbitron-bold-base64';
 import type { ValidatedPayload } from './payload';
 
 /**
@@ -6,7 +7,10 @@ import type { ValidatedPayload } from './payload';
  * data modules render as crisp squares or smooth-blob rounded shapes;
  * `canvasShape` is a v2 hook not yet implemented. `centerIcon` is an
  * optional decorative overlay painted in the foreground color, sized
- * to stay safely under the H error-correction budget.
+ * to stay safely under the H error-correction budget. `centerText` is
+ * a short label (≤ CENTER_TEXT_MAX_LENGTH chars after sanitization)
+ * rendered in the same carved-out region; when both are present, text
+ * sits below the icon.
  */
 export type QrStyle = {
   foreground: string;
@@ -14,6 +18,7 @@ export type QrStyle = {
   moduleShape: 'square' | 'rounded'; // v2: 'dot'
   canvasShape: 'square'; // v2: 'circle' | 'hex'
   centerIcon: { id: string; innerSvg: string } | null;
+  centerText: string | null;
 };
 
 export type QrResult = {
@@ -49,13 +54,57 @@ export const CENTER_ICON_SIZE_RATIO = 0.22;
  */
 export const CENTER_ICON_PAD_MODULES = 0.8;
 
+/** Hard cap on the user-supplied center-text label (after sanitization). */
+export const CENTER_TEXT_MAX_LENGTH = 10;
+
+/**
+ * Approximate ratio of character advance width to font-size for the chosen
+ * display font. Orbitron Bold is a wide geometric sans (uppercase glyphs sit
+ * around 0.7–0.85em); 0.78 is a conservative average so 8-char labels still
+ * fit inside the carved width without clipping.
+ */
+const CENTER_TEXT_CHAR_WIDTH_RATIO = 0.78;
+
+/** Text-only mode: cap font size at this fraction of the carved area width. */
+const CENTER_TEXT_MAX_FONT_TO_PAD_RATIO = 0.5;
+
+/**
+ * Icon + text mode: target font size (in module units) for the text row.
+ * Sized to feel like a caption beneath the icon without dominating it.
+ */
+const CENTER_TEXT_COMPANION_FONT_MODULES = 1.4;
+
+/** Gap (module units) between the icon and the text row when both are shown. */
+const CENTER_TEXT_ROW_GAP_MODULES = 0.4;
+
+/**
+ * SVG `font-family` stack used for center text. Orbitron Bold matches the
+ * masthead/display type in the HUD aesthetic. The web-loaded Orbitron face is
+ * unreachable from sandboxed SVG-as-image (the PNG export path), so the stack
+ * falls back to system sans-serif there. The exported SVG opened in a browser
+ * with Orbitron available still renders in-brand.
+ */
+export const CENTER_TEXT_FONT_FAMILY = "'Orbitron', sans-serif";
+
 export const DEFAULT_STYLE: QrStyle = {
   foreground: '#0f1b3d',
   background: '#f0ede2',
   moduleShape: 'square',
   canvasShape: 'square',
   centerIcon: null,
+  centerText: null,
 };
+
+/**
+ * Sanitize a raw user-entered center-text label: strip control characters,
+ * trim whitespace, and cap to {@link CENTER_TEXT_MAX_LENGTH}. Returns the
+ * cleaned string (possibly empty — callers map '' to null on QrStyle).
+ */
+export function sanitizeCenterText(raw: string): string {
+  // eslint-disable-next-line no-control-regex
+  const stripped = raw.replace(/[\u0000-\u001F\u007F]/g, '');
+  return stripped.trim().slice(0, CENTER_TEXT_MAX_LENGTH);
+}
 
 /**
  * Generate a QR matrix from a validated payload. Uses error-correction
@@ -296,16 +345,14 @@ export function shapeRenderingFor(style: QrStyle): 'crispEdges' | 'geometricPrec
 
 /**
  * Geometry of the center-icon overlay in QR-SVG user units (one unit =
- * one module). Both the on-screen preview and the exported SVG go through
- * this so they cannot drift apart. The icon is rendered into a 24-unit
- * source viewBox (`src/assets/center-icons/*.svg`); `iconScale` is the
- * factor to bring that into module space.
+ * one module). Legacy shape kept for tests/callers that only deal with the
+ * icon-only square layout. New code should prefer {@link centerOverlayLayout}.
  */
 export type CenterIconLayout = {
   /** Top-left of the backing rect, in QR-SVG units (incl. quiet zone). */
   padX: number;
   padY: number;
-  /** Side length of the backing rect. */
+  /** Side length of the backing rect (only valid when the layout is square). */
   padSize: number;
   /** Top-left of the icon's transformed bounding box. */
   iconX: number;
@@ -317,25 +364,158 @@ export type CenterIconLayout = {
 };
 
 /**
+ * Generalized placement for the center overlay (icon and/or text). The
+ * carved-out backing rect can be non-square when both icon and text are
+ * present — the box extends downward to fit a text row below the icon.
+ * Coordinates are in QR-SVG user space (1 unit = 1 module, includes the
+ * quiet zone).
+ */
+export type CenterOverlayLayout = {
+  /** Backing rect geometry. Both width and height; not necessarily equal. */
+  padX: number;
+  padY: number;
+  padWidth: number;
+  padHeight: number;
+  /** Icon placement when an icon is rendered; null otherwise. */
+  icon: { x: number; y: number; size: number; scale: number } | null;
+  /**
+   * Text placement when a label is rendered; null otherwise. `x`/`y` is the
+   * center point (use with `text-anchor="middle"` + `dominant-baseline="central"`);
+   * `fontSize` is in module units.
+   */
+  text: { x: number; y: number; fontSize: number } | null;
+};
+
+/**
  * Compute the icon overlay placement for a QR of the given `size` (in
  * modules, excluding quiet zone). Coordinates are in the QR-SVG's user
  * space, which includes the quiet zone — so the icon centers on the QR
  * including its border, matching what scanners see.
  */
 export function centerIconLayout(size: number): CenterIconLayout {
-  const total = size + QUIET_ZONE * 2;
-  const iconSize = size * CENTER_ICON_SIZE_RATIO;
-  const padSize = iconSize + CENTER_ICON_PAD_MODULES * 2;
-  const center = total / 2;
+  const layout = centerOverlayLayout(size, true, 0);
+  if (!layout.icon) {
+    throw new Error('unreachable: icon-only overlay layout must produce an icon');
+  }
   return {
-    padX: center - padSize / 2,
-    padY: center - padSize / 2,
-    padSize,
-    iconX: center - iconSize / 2,
-    iconY: center - iconSize / 2,
-    iconSize,
-    iconScale: iconSize / 24,
+    padX: layout.padX,
+    padY: layout.padY,
+    padSize: layout.padWidth,
+    iconX: layout.icon.x,
+    iconY: layout.icon.y,
+    iconSize: layout.icon.size,
+    iconScale: layout.icon.scale,
   };
+}
+
+/**
+ * Compute placement for the carved-out center overlay (icon and/or text).
+ *
+ * - `hasIcon=true, textLength=0` → square carved area, icon centered.
+ * - `hasIcon=false, textLength>0` → square carved area, text centered both axes
+ *   with a font size chosen to fit the available width (and capped relative to
+ *   the carved-area width so a single character doesn't render absurdly large).
+ * - `hasIcon=true, textLength>0` → carved area extends downward to fit an
+ *   icon row + small gap + text row. Icon stays at its current scannable size.
+ * - Neither set → zero-sized layout (caller should skip emitting the overlay).
+ */
+export function centerOverlayLayout(
+  size: number,
+  hasIcon: boolean,
+  textLength: number,
+): CenterOverlayLayout {
+  const total = size + QUIET_ZONE * 2;
+  const cx = total / 2;
+  const iconSize = size * CENTER_ICON_SIZE_RATIO;
+  const padX0 = CENTER_ICON_PAD_MODULES;
+  const padWidth = iconSize + padX0 * 2;
+  const hasText = textLength > 0;
+
+  if (!hasIcon && !hasText) {
+    return { padX: 0, padY: 0, padWidth: 0, padHeight: 0, icon: null, text: null };
+  }
+
+  const availableTextWidth = padWidth - padX0 * 2;
+
+  if (hasIcon && !hasText) {
+    const padHeight = padWidth;
+    return {
+      padX: cx - padWidth / 2,
+      padY: cx - padHeight / 2,
+      padWidth,
+      padHeight,
+      icon: {
+        x: cx - iconSize / 2,
+        y: cx - iconSize / 2,
+        size: iconSize,
+        scale: iconSize / 24,
+      },
+      text: null,
+    };
+  }
+
+  if (!hasIcon && hasText) {
+    const padHeight = padWidth;
+    const widthFit = availableTextWidth / (textLength * CENTER_TEXT_CHAR_WIDTH_RATIO);
+    const fontSize = Math.min(widthFit, padWidth * CENTER_TEXT_MAX_FONT_TO_PAD_RATIO);
+    return {
+      padX: cx - padWidth / 2,
+      padY: cx - padHeight / 2,
+      padWidth,
+      padHeight,
+      icon: null,
+      text: { x: cx, y: cx, fontSize },
+    };
+  }
+
+  // Both icon and text.
+  const widthFit = availableTextWidth / (textLength * CENTER_TEXT_CHAR_WIDTH_RATIO);
+  const fontSize = Math.min(widthFit, CENTER_TEXT_COMPANION_FONT_MODULES);
+  const gap = CENTER_TEXT_ROW_GAP_MODULES;
+  const padHeight = padX0 + iconSize + gap + fontSize + padX0;
+  const padX = cx - padWidth / 2;
+  const padY = cx - padHeight / 2;
+  return {
+    padX,
+    padY,
+    padWidth,
+    padHeight,
+    icon: {
+      x: cx - iconSize / 2,
+      y: padY + padX0,
+      size: iconSize,
+      scale: iconSize / 24,
+    },
+    text: {
+      x: cx,
+      y: padY + padX0 + iconSize + gap + fontSize / 2,
+      fontSize,
+    },
+  };
+}
+
+/**
+ * Escape user-supplied text for safe inclusion as the body of an SVG `<text>`
+ * element. Covers the five XML predefined entities so payloads like `<3` or
+ * `&hack` cannot break SVG structure or sneak in markup.
+ */
+export function escapeXmlText(s: string): string {
+  return s.replace(/[<>&"']/g, (c) => {
+    switch (c) {
+      case '<':
+        return '&lt;';
+      case '>':
+        return '&gt;';
+      case '&':
+        return '&amp;';
+      case '"':
+        return '&quot;';
+      case "'":
+        return '&apos;';
+      default:
+        return c;
+    }
+  });
 }
 
 /**
@@ -350,11 +530,11 @@ export function qrToSvgString(qr: QrResult, style: QrStyle): string {
   const total = size + QUIET_ZONE * 2;
   const d = qrToSvgPath(matrix, size, version, style);
   const shapeRendering = shapeRenderingFor(style);
-  const overlay = style.centerIcon
-    ? renderCenterIconOverlay(style.centerIcon, size, style.background, style.foreground)
-    : '';
+  const overlay = renderCenterOverlay(style, size);
+  const fontDefs = style.centerText && style.centerText.length > 0 ? renderFontDefs() : '';
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${String(total)} ${String(total)}" shape-rendering="${shapeRendering}">`,
+    fontDefs,
     `<rect width="${String(total)}" height="${String(total)}" fill="${style.background}"/>`,
     `<path fill="${style.foreground}" d="${d}"/>`,
     overlay,
@@ -363,23 +543,53 @@ export function qrToSvgString(qr: QrResult, style: QrStyle): string {
 }
 
 /**
- * Render the backing-pad rect + scaled icon group. The icon SVGs use
- * `fill="currentColor"`, so setting `color` on the wrapping `<g>` paints
- * them in the foreground without needing per-icon edits. The backing pad
- * (background color) gives scanners a clean field beneath the glyph.
+ * Emit a `<defs><style>` block embedding Orbitron Bold as an inline base64
+ * WOFF2 data URL. Gated on `centerText` being present so icon-only exports
+ * don't pay the ~9 KB cost. The inline data URL is the key: SVG-as-image
+ * rendering (used by the PNG canvas path) is sandboxed from page-loaded
+ * `@font-face` rules, but it does honor `@font-face` declarations defined
+ * inside the SVG itself when the `src` is an inline data URL (no network).
  */
-function renderCenterIconOverlay(
-  icon: { innerSvg: string },
-  size: number,
-  background: string,
-  foreground: string,
-): string {
-  if (icon.innerSvg.length === 0) return '';
-  const { padX, padY, padSize, iconX, iconY, iconScale } = centerIconLayout(size);
+function renderFontDefs(): string {
   return [
-    `<rect x="${String(padX)}" y="${String(padY)}" width="${String(padSize)}" height="${String(padSize)}" fill="${background}"/>`,
-    `<g transform="translate(${String(iconX)} ${String(iconY)}) scale(${String(iconScale)})" color="${foreground}">`,
-    icon.innerSvg,
-    `</g>`,
+    `<defs><style>`,
+    `@font-face{`,
+    `font-family:'Orbitron';`,
+    `font-style:normal;`,
+    `font-weight:700;`,
+    `src:url(data:font/woff2;base64,${ORBITRON_BOLD_WOFF2_BASE64}) format('woff2');`,
+    `}`,
+    `</style></defs>`,
   ].join('');
+}
+
+/**
+ * Render the carved-out center overlay: backing rect + optional icon group +
+ * optional bold text. Returns an empty string when neither icon nor text is
+ * configured (so callers don't have to branch). Icon SVGs use
+ * `fill="currentColor"` so a single source paints in any foreground.
+ */
+function renderCenterOverlay(style: QrStyle, size: number): string {
+  const icon = style.centerIcon && style.centerIcon.innerSvg.length > 0 ? style.centerIcon : null;
+  const text = style.centerText && style.centerText.length > 0 ? style.centerText : null;
+  if (!icon && !text) return '';
+
+  const layout = centerOverlayLayout(size, icon !== null, text ? text.length : 0);
+  const parts: string[] = [];
+  parts.push(
+    `<rect x="${String(layout.padX)}" y="${String(layout.padY)}" width="${String(layout.padWidth)}" height="${String(layout.padHeight)}" fill="${style.background}"/>`,
+  );
+  if (icon && layout.icon) {
+    parts.push(
+      `<g transform="translate(${String(layout.icon.x)} ${String(layout.icon.y)}) scale(${String(layout.icon.scale)})" color="${style.foreground}">`,
+      icon.innerSvg,
+      `</g>`,
+    );
+  }
+  if (text && layout.text) {
+    parts.push(
+      `<text x="${String(layout.text.x)}" y="${String(layout.text.y)}" text-anchor="middle" dominant-baseline="central" font-family="${CENTER_TEXT_FONT_FAMILY}" font-weight="700" font-size="${String(layout.text.fontSize)}" fill="${style.foreground}">${escapeXmlText(text)}</text>`,
+    );
+  }
+  return parts.join('');
 }

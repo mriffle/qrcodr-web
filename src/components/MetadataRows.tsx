@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import type { QrResult, QrStyle } from '../lib/qr';
+import { CENTER_TEXT_MAX_LENGTH, type QrResult, type QrStyle } from '../lib/qr';
 import { CENTER_ICONS, type CenterIconDef } from '../lib/center-icons';
 
 type Props = {
@@ -7,10 +7,12 @@ type Props = {
   rawPayload: string;
   style: QrStyle;
   centerIcon: CenterIconDef;
+  centerText: string;
   onForegroundChange: (next: string) => void;
   onBackgroundChange: (next: string) => void;
   onModuleShapeChange: (next: QrStyle['moduleShape']) => void;
   onCenterIconChange: (next: CenterIconDef) => void;
+  onCenterTextChange: (next: string) => void;
 };
 
 /**
@@ -22,10 +24,12 @@ export function MetadataRows({
   rawPayload,
   style,
   centerIcon,
+  centerText,
   onForegroundChange,
   onBackgroundChange,
   onModuleShapeChange,
   onCenterIconChange,
+  onCenterTextChange,
 }: Props) {
   const trimmed = rawPayload.trim();
   return (
@@ -64,7 +68,37 @@ export function MetadataRows({
         background={style.background}
         onChange={onCenterIconChange}
       />
+      <CenterTextRow value={centerText} onChange={onCenterTextChange} />
     </section>
+  );
+}
+
+function CenterTextRow({ value, onChange }: { value: string; onChange: (next: string) => void }) {
+  return (
+    <div className="telemetry__row telemetry__row--text" data-label="Center text">
+      <span className="telemetry__label">Center text</span>
+      <span className="center-text-input">
+        <span className="center-text-input__prompt" aria-hidden="true">
+          ./inscribe &gt;
+        </span>
+        <input
+          type="text"
+          className="center-text-input__field"
+          value={value}
+          maxLength={CENTER_TEXT_MAX_LENGTH}
+          spellCheck={false}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          placeholder="——"
+          aria-label="Center text label (up to 10 characters)"
+          data-testid="center-text-input"
+          onChange={(e) => {
+            onChange(e.target.value);
+          }}
+        />
+      </span>
+    </div>
   );
 }
 

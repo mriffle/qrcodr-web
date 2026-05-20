@@ -5,7 +5,13 @@ import { QrDrawing } from './components/QrDrawing';
 import { MetadataRows } from './components/MetadataRows';
 import { ExportRow } from './components/ExportRow';
 import { validatePayload } from './lib/payload';
-import { DEFAULT_STYLE, generateQr, type QrResult, type QrStyle } from './lib/qr';
+import {
+  DEFAULT_STYLE,
+  generateQr,
+  sanitizeCenterText,
+  type QrResult,
+  type QrStyle,
+} from './lib/qr';
 import { NONE_ICON, type CenterIconDef } from './lib/center-icons';
 
 export function App() {
@@ -14,18 +20,20 @@ export function App() {
   const [background, setBackground] = useState(DEFAULT_STYLE.background);
   const [moduleShape, setModuleShape] = useState<QrStyle['moduleShape']>(DEFAULT_STYLE.moduleShape);
   const [centerIcon, setCenterIcon] = useState<CenterIconDef>(NONE_ICON);
+  const [centerText, setCenterText] = useState('');
 
-  const style = useMemo<QrStyle>(
-    () => ({
+  const style = useMemo<QrStyle>(() => {
+    const sanitized = sanitizeCenterText(centerText);
+    return {
       ...DEFAULT_STYLE,
       foreground,
       background,
       moduleShape,
       centerIcon:
         centerIcon.id === 'none' ? null : { id: centerIcon.id, innerSvg: centerIcon.innerSvg },
-    }),
-    [foreground, background, moduleShape, centerIcon],
-  );
+      centerText: sanitized.length > 0 ? sanitized : null,
+    };
+  }, [foreground, background, moduleShape, centerIcon, centerText]);
 
   const validation = useMemo(() => validatePayload(rawPayload), [rawPayload]);
 
@@ -55,10 +63,12 @@ export function App() {
           rawPayload={rawPayload}
           style={style}
           centerIcon={centerIcon}
+          centerText={centerText}
           onForegroundChange={setForeground}
           onBackgroundChange={setBackground}
           onModuleShapeChange={setModuleShape}
           onCenterIconChange={setCenterIcon}
+          onCenterTextChange={setCenterText}
         />
       </div>
 

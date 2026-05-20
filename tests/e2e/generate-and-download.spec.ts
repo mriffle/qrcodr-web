@@ -158,6 +158,73 @@ test.describe('qrcodr-web · center icon decode', () => {
   }
 });
 
+test.describe('qrcodr-web · center text decode', () => {
+  test('typing center text embeds a <text> element in the preview', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('payload-input').fill('https://example.com');
+    await page.getByTestId('center-text-input').fill('OPS');
+    const overlayText = page.locator('.qr-frame[data-modules] svg text');
+    await expect(overlayText).toHaveText('OPS');
+  });
+
+  test('respects the 10-character cap via maxLength', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('payload-input').fill('https://example.com');
+    const input = page.getByTestId('center-text-input');
+    await input.fill('abcdefghijklmn');
+    await expect(input).toHaveValue('abcdefghij');
+  });
+
+  for (const fixture of TEST_PAYLOADS) {
+    test(`PNG of "${fixture.name}" with center text "v2.0" decodes back to its payload`, async ({
+      page,
+    }) => {
+      await page.goto('/');
+      await page.getByTestId('payload-input').fill(fixture.value);
+      await page.getByTestId('center-text-input').fill('v2.0');
+      const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        page.getByTestId('export-png').click(),
+      ]);
+      const buffer = await readDownload(download);
+      const decoded = await decodePng(buffer);
+      expect(decoded).toBe(fixture.value);
+    });
+
+    test(`SVG of "${fixture.name}" with center text "OPS" decodes back to its payload`, async ({
+      page,
+    }) => {
+      await page.goto('/');
+      await page.getByTestId('payload-input').fill(fixture.value);
+      await page.getByTestId('center-text-input').fill('OPS');
+      const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        page.getByTestId('export-svg').click(),
+      ]);
+      const buffer = await readDownload(download);
+      const decoded = await decodeSvg(buffer);
+      expect(decoded).toBe(fixture.value);
+    });
+
+    test(`PNG of "${fixture.name}" with heart icon + "v2" text decodes back to its payload`, async ({
+      page,
+    }) => {
+      await page.goto('/');
+      await page.getByTestId('payload-input').fill(fixture.value);
+      await page.getByTestId('center-icon-trigger').click();
+      await page.getByTestId('center-icon-option-heart').click();
+      await page.getByTestId('center-text-input').fill('v2');
+      const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        page.getByTestId('export-png').click(),
+      ]);
+      const buffer = await readDownload(download);
+      const decoded = await decodePng(buffer);
+      expect(decoded).toBe(fixture.value);
+    });
+  }
+});
+
 test.describe('qrcodr-web · rounded modules decode', () => {
   test('toggling rounded mode flips the preview path to use arc commands', async ({ page }) => {
     await page.goto('/');

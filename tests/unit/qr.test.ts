@@ -1,15 +1,22 @@
 import { describe, expect, test } from 'vitest';
 import {
+  CENTER_ICON_PAD_MODULES,
+  CENTER_ICON_SIZE_RATIO,
+  CENTER_TEXT_MAX_LENGTH,
   DEFAULT_STYLE,
   QUIET_ZONE,
+  centerOverlayLayout,
+  escapeXmlText,
   generateQr,
   isAlignmentModule,
   isFinderModule,
   isReservedSquare,
   isTimingModule,
   qrToSvgString,
+  sanitizeCenterText,
   shouldRoundCorner,
 } from '../../src/lib/qr';
+import { findCenterIcon } from '../../src/lib/center-icons';
 import { validatePayload, type ValidatedPayload } from '../../src/lib/payload';
 
 function valid(s: string): ValidatedPayload {
@@ -400,5 +407,176 @@ describe('qrToSvgString — rounded mode', () => {
     const a = qrToSvgString(generateQr(valid('repeat-me')), rounded());
     const b = qrToSvgString(generateQr(valid('repeat-me')), rounded());
     expect(a).toBe(b);
+  });
+});
+
+describe('sanitizeCenterText', () => {
+  test('trims surrounding whitespace', () => {
+    expect(sanitizeCenterText('  hi  ')).toBe('hi');
+  });
+
+  test('caps to CENTER_TEXT_MAX_LENGTH characters', () => {
+    expect(sanitizeCenterText('abcdefghijkl')).toHaveLength(CENTER_TEXT_MAX_LENGTH);
+  });
+
+  test('strips C0 control characters and DEL', () => {
+    expect(sanitizeCenterText('a\x00b\x1fc\x7fd')).toBe('abcd');
+  });
+
+  test('preserves Unicode glyphs', () => {
+    // Up to the cap. Common diacritics survive.
+    const fixture = 'Æthelflæden-Ælflæd';
+    expect(sanitizeCenterText(fixture)).toBe(fixture.slice(0, CENTER_TEXT_MAX_LENGTH));
+  });
+
+  test('returns empty string for whitespace-only input', () => {
+    expect(sanitizeCenterText('   ')).toBe('');
+    expect(sanitizeCenterText('')).toBe('');
+  });
+});
+
+describe('escapeXmlText', () => {
+  test('escapes the five XML predefined entities', () => {
+    expect(escapeXmlText('<>&"\'')).toBe('&lt;&gt;&amp;&quot;&apos;');
+  });
+
+  test('leaves ordinary text untouched', () => {
+    expect(escapeXmlText('OPS-42')).toBe('OPS-42');
+  });
+
+  test('order of operations: ampersands are escaped before other entities', () => {
+    // Common bug: if you escape `<` to `&lt;` first then escape `&`, you get
+    // `&amp;lt;`. A single pass with a character class avoids that.
+    expect(escapeXmlText('a&b')).toBe('a&amp;b');
+    expect(escapeXmlText('&<')).toBe('&amp;&lt;');
+  });
+});
+
+describe('centerOverlayLayout', () => {
+  const SIZE = 25;
+  const padX0 = CENTER_ICON_PAD_MODULES;
+  const iconSize = SIZE * CENTER_ICON_SIZE_RATIO;
+  const padWidth = iconSize + padX0 * 2;
+  const total = SIZE + QUIET_ZONE * 2;
+  const cx = total / 2;
+
+  test('returns a zero-sized layout when neither icon nor text is set', () => {
+    const layout = centerOverlayLayout(SIZE, false, 0);
+    expect(layout.padWidth).toBe(0);
+    expect(layout.padHeight).toBe(0);
+    expect(layout.icon).toBeNull();
+    expect(layout.text).toBeNull();
+  });
+
+  test('icon-only layout is square and matches legacy icon geometry', () => {
+    const layout = centerOverlayLayout(SIZE, true, 0);
+    expect(layout.padWidth).toBeCloseTo(padWidth);
+    expect(layout.padHeight).toBeCloseTo(padWidth);
+    expect(layout.icon).not.toBeNull();
+    expect(layout.text).toBeNull();
+    expect(layout.icon?.size).toBeCloseTo(iconSize);
+    // Icon centered on the QR (including quiet zone).
+    expect((layout.icon?.x ?? 0) + iconSize / 2).toBeCloseTo(cx);
+    expect((layout.icon?.y ?? 0) + iconSize / 2).toBeCloseTo(cx);
+  });
+
+  test('text-only layout is square, with text centered on the QR center', () => {
+    const layout = centerOverlayLayout(SIZE, false, 4);
+    expect(layout.padWidth).toBeCloseTo(padWidth);
+    expect(layout.padHeight).toBeCloseTo(padWidth);
+    expect(layout.icon).toBeNull();
+    expect(layout.text).not.toBeNull();
+    expect(layout.text?.x).toBeCloseTo(cx);
+    expect(layout.text?.y).toBeCloseTo(cx);
+    expect(layout.text?.fontSize ?? 0).toBeGreaterThan(0);
+  });
+
+  test('text-only font size shrinks as the text gets longer', () => {
+    const short = centerOverlayLayout(SIZE, false, 2);
+    const long = centerOverlayLayout(SIZE, false, 8);
+    expect(short.text?.fontSize).toBeGreaterThan(long.text?.fontSize ?? Infinity);
+  });
+
+  test('icon-plus-text layout extends padHeight downward to fit text below the icon', () => {
+    const layout = centerOverlayLayout(SIZE, true, 4);
+    expect(layout.padWidth).toBeCloseTo(padWidth);
+    expect(layout.padHeight).toBeGreaterThan(padWidth);
+    expect(layout.icon).not.toBeNull();
+    expect(layout.text).not.toBeNull();
+    // Icon sits above text.
+    expect(layout.icon?.y ?? 0).toBeLessThan(layout.text?.y ?? 0);
+    // Both still horizontally centered.
+    expect(layout.text?.x).toBeCloseTo(cx);
+    expect((layout.icon?.x ?? 0) + (layout.icon?.size ?? 0) / 2).toBeCloseTo(cx);
+  });
+
+  test('icon size does not shrink when text is added next to it', () => {
+    const iconOnly = centerOverlayLayout(SIZE, true, 0);
+    const both = centerOverlayLayout(SIZE, true, 6);
+    expect(both.icon?.size).toBeCloseTo(iconOnly.icon?.size ?? -1);
+  });
+});
+
+describe('qrToSvgString — with center text', () => {
+  const textStyle = (text: string) => ({ ...DEFAULT_STYLE, centerText: text });
+
+  test('omits text overlay entirely when centerText is null or empty', () => {
+    const qr = generateQr(valid('hello'));
+    expect(qrToSvgString(qr, DEFAULT_STYLE)).not.toContain('<text');
+    expect(qrToSvgString(qr, textStyle(''))).not.toContain('<text');
+  });
+
+  test('emits a centered bold <text> in the foreground color', () => {
+    const qr = generateQr(valid('hello'));
+    const svg = qrToSvgString(qr, { ...textStyle('OPS'), foreground: '#aa00bb' });
+    expect(svg).toMatch(/<text [^>]*text-anchor="middle"[^>]*>OPS<\/text>/);
+    expect(svg).toMatch(/<text [^>]*font-weight="700"[^>]*>OPS<\/text>/);
+    expect(svg).toMatch(/<text [^>]*fill="#aa00bb"[^>]*>OPS<\/text>/);
+  });
+
+  test('escapes XML-special characters in the text body', () => {
+    const qr = generateQr(valid('hello'));
+    const svg = qrToSvgString(qr, textStyle('a&<b'));
+    expect(svg).toContain('>a&amp;&lt;b</text>');
+    expect(svg).not.toContain('>a&<b<');
+  });
+
+  test('renders carved rect + icon + text when both are present', () => {
+    const qr = generateQr(valid('hello'));
+    const svg = qrToSvgString(qr, {
+      ...DEFAULT_STYLE,
+      centerIcon: findCenterIcon('heart'),
+      centerText: 'v2',
+    });
+    expect(svg).toMatch(/<g transform="translate\(/);
+    expect(svg).toMatch(/<text [^>]*>v2<\/text>/);
+    // Overlay sits after the modules path.
+    const pathIdx = svg.indexOf('<path ');
+    expect(svg.indexOf('<text')).toBeGreaterThan(pathIdx);
+  });
+
+  test('embeds Orbitron @font-face only when centerText is present', () => {
+    const qr = generateQr(valid('hello'));
+    // No text → no font embed (icon-only exports stay small).
+    expect(qrToSvgString(qr, DEFAULT_STYLE)).not.toContain('@font-face');
+    expect(
+      qrToSvgString(qr, { ...DEFAULT_STYLE, centerIcon: findCenterIcon('heart') }),
+    ).not.toContain('@font-face');
+    // With text → font face inlined as data URL.
+    const withText = qrToSvgString(qr, { ...DEFAULT_STYLE, centerText: 'OPS' });
+    expect(withText).toContain('<defs><style>');
+    expect(withText).toContain('@font-face');
+    expect(withText).toContain("font-family:'Orbitron'");
+    expect(withText).toContain('font-weight:700');
+    expect(withText).toContain('src:url(data:font/woff2;base64,');
+  });
+
+  test('font defs appear before the modules path so the font is resolved by rendering time', () => {
+    const qr = generateQr(valid('hello'));
+    const svg = qrToSvgString(qr, { ...DEFAULT_STYLE, centerText: 'OPS' });
+    const defsIdx = svg.indexOf('<defs>');
+    const pathIdx = svg.indexOf('<path ');
+    expect(defsIdx).toBeGreaterThan(-1);
+    expect(defsIdx).toBeLessThan(pathIdx);
   });
 });

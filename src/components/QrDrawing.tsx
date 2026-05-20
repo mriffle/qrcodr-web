@@ -1,6 +1,7 @@
 import {
+  CENTER_TEXT_FONT_FAMILY,
   QUIET_ZONE,
-  centerIconLayout,
+  centerOverlayLayout,
   qrToSvgPath,
   shapeRenderingFor,
   type QrResult,
@@ -56,9 +57,13 @@ export function QrDrawing({ qr, style }: Props) {
   const total = size + QUIET_ZONE * 2;
   const d = qrToSvgPath(matrix, size, version, style);
   const shapeRendering = shapeRenderingFor(style);
-  const overlay =
+  const overlayIcon =
     style.centerIcon && style.centerIcon.innerSvg.length > 0 ? style.centerIcon : null;
-  const layout = overlay ? centerIconLayout(size) : null;
+  const overlayText = style.centerText && style.centerText.length > 0 ? style.centerText : null;
+  const layout =
+    overlayIcon || overlayText
+      ? centerOverlayLayout(size, overlayIcon !== null, overlayText ? overlayText.length : 0)
+      : null;
 
   return (
     <div
@@ -77,21 +82,35 @@ export function QrDrawing({ qr, style }: Props) {
         >
           <rect x={0} y={0} width={total} height={total} fill={style.background} />
           <path d={d} fill={style.foreground} />
-          {overlay && layout && (
-            <>
-              <rect
-                x={layout.padX}
-                y={layout.padY}
-                width={layout.padSize}
-                height={layout.padSize}
-                fill={style.background}
-              />
-              <g
-                transform={`translate(${String(layout.iconX)} ${String(layout.iconY)}) scale(${String(layout.iconScale)})`}
-                color={style.foreground}
-                dangerouslySetInnerHTML={{ __html: overlay.innerSvg }}
-              />
-            </>
+          {layout && (
+            <rect
+              x={layout.padX}
+              y={layout.padY}
+              width={layout.padWidth}
+              height={layout.padHeight}
+              fill={style.background}
+            />
+          )}
+          {overlayIcon && layout?.icon && (
+            <g
+              transform={`translate(${String(layout.icon.x)} ${String(layout.icon.y)}) scale(${String(layout.icon.scale)})`}
+              color={style.foreground}
+              dangerouslySetInnerHTML={{ __html: overlayIcon.innerSvg }}
+            />
+          )}
+          {overlayText && layout?.text && (
+            <text
+              x={layout.text.x}
+              y={layout.text.y}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fontFamily={CENTER_TEXT_FONT_FAMILY}
+              fontWeight={700}
+              fontSize={layout.text.fontSize}
+              fill={style.foreground}
+            >
+              {overlayText}
+            </text>
           )}
         </svg>
       </div>
