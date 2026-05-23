@@ -411,6 +411,83 @@ describe('qrToSvgString — rounded mode', () => {
   });
 });
 
+describe('qrToSvgString — chamfer mode', () => {
+  const chamfer = (overrides: Partial<typeof DEFAULT_STYLE> = {}) => ({
+    ...DEFAULT_STYLE,
+    moduleShape: 'chamfer' as const,
+    ...overrides,
+  });
+
+  test('emits straight 45° cut commands (l), not arcs', () => {
+    const qr = generateQr(valid('https://example.com'));
+    const svg = qrToSvgString(qr, chamfer());
+    // CHAMFER_DEPTH = 0.5, cuts are relative diagonal lines like "l0.5,0.5".
+    expect(svg).toMatch(/l0\.5,0\.5/);
+    // No arcs anywhere — chamfer is all straight lines.
+    expect(svg).not.toMatch(/a0\.\d/);
+  });
+
+  test('chamfer mode switches shape-rendering to geometricPrecision', () => {
+    const qr = generateQr(valid('https://example.com'));
+    const svg = qrToSvgString(qr, chamfer());
+    expect(svg).toContain('shape-rendering="geometricPrecision"');
+    expect(svg).not.toContain('shape-rendering="crispEdges"');
+  });
+
+  test('still emits exactly one <path> (no antialiasing seams)', () => {
+    const qr = generateQr(valid('https://example.com'));
+    const svg = qrToSvgString(qr, chamfer());
+    expect((svg.match(/<path/g) ?? []).length).toBe(1);
+  });
+
+  test('preserves one M per on-cell (merging is per-corner, not per-run)', () => {
+    const qr = generateQr(valid('https://example.com'));
+    const svg = qrToSvgString(qr, chamfer());
+    const onCells = Array.from(qr.matrix).filter((v) => v === 1).length;
+    const moveCommands = (svg.match(/M[\d-]/g) ?? []).length;
+    expect(moveCommands).toBe(onCells);
+  });
+
+  test('finder pattern subpaths render as squares (no cut commands)', () => {
+    const qr = generateQr(valid('https://example.com'));
+    const svg = qrToSvgString(qr, chamfer());
+    const d = /d="([^"]+)"/.exec(svg)?.[1];
+    expect(d).toBeDefined();
+    if (!d) return;
+    const fragments = d.split('M').filter((s) => s.length > 0);
+    let finderSubpaths = 0;
+    for (const frag of fragments) {
+      const coordMatch = /^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/.exec(frag);
+      if (!coordMatch) continue;
+      const mx = Math.floor(Number(coordMatch[1])) - QUIET_ZONE;
+      const my = Math.floor(Number(coordMatch[2])) - QUIET_ZONE;
+      if (isFinderModule(mx, my, qr.size)) {
+        finderSubpaths++;
+        expect(frag).not.toContain('l0.5');
+      }
+    }
+    expect(finderSubpaths).toBeGreaterThan(10);
+  });
+
+  test('shared edges within a run stay flush (interior corners are not cut)', () => {
+    // A horizontal run of 3: only the outer corners of the end cells are
+    // cut, so the whole run carries exactly 4 cut commands (2 per end).
+    const m = new Uint8Array(21 * 21);
+    m[10 * 21 + 10] = 1;
+    m[10 * 21 + 11] = 1;
+    m[10 * 21 + 12] = 1;
+    const d = qrToSvgPath(m, 21, 1, { ...DEFAULT_STYLE, moduleShape: 'chamfer' });
+    expect((d.match(/M[\d-]/g) ?? []).length).toBe(3); // still one subpath per cell
+    expect((d.match(/l/g) ?? []).length).toBe(4); // only the 4 exposed run-end corners
+  });
+
+  test('output is deterministic for the same payload', () => {
+    expect(qrToSvgString(generateQr(valid('repeat-me')), chamfer())).toBe(
+      qrToSvgString(generateQr(valid('repeat-me')), chamfer()),
+    );
+  });
+});
+
 describe('qrToSvgString — dot mode', () => {
   const dot = (overrides: Partial<typeof DEFAULT_STYLE> = {}) => ({
     ...DEFAULT_STYLE,

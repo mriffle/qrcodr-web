@@ -5,10 +5,12 @@ import type { ValidatedPayload } from './payload';
 /**
  * Visual configuration for QR rendering. `moduleShape` selects whether
  * data modules render as crisp squares, smooth-blob rounded shapes that
- * merge into pills along runs, fully separated circular dots that never
- * merge, or capsule "pills" that fuse adjacent on-cells along a single
- * axis (`horizontal-pill` / `vertical-pill`) with a small cross-axis gap;
- * `canvasShape` is a v2 hook not yet implemented.
+ * merge into pills along runs, chamfered squares with 45° corners cut
+ * (same merge logic as rounded, straight cuts instead of arcs), fully
+ * separated circular dots that never merge, or capsule "pills" that fuse
+ * adjacent on-cells along a single axis (`horizontal-pill` /
+ * `vertical-pill`) with a small cross-axis gap; `canvasShape` is a v2
+ * hook not yet implemented.
  * `centerIcon` is an optional decorative overlay painted in the
  * foreground color, sized to stay safely under the H error-correction
  * budget. `centerText` is a short label (≤ CENTER_TEXT_MAX_LENGTH chars
@@ -18,7 +20,7 @@ import type { ValidatedPayload } from './payload';
 export type QrStyle = {
   foreground: string;
   background: string;
-  moduleShape: 'square' | 'rounded' | 'dot' | 'horizontal-pill' | 'vertical-pill';
+  moduleShape: 'square' | 'rounded' | 'chamfer' | 'dot' | 'horizontal-pill' | 'vertical-pill';
   canvasShape: 'square'; // v2: 'circle' | 'hex'
   centerIcon: { id: string; innerSvg: string } | null;
   centerText: string | null;
@@ -40,6 +42,18 @@ export const QUIET_ZONE = 4;
 
 /** Fixed module-rounding radius in module units. 0.5 = full circle / pill. */
 const MODULE_RADIUS = 0.5;
+
+/**
+ * Corner-cut depth for `chamfer` mode, in module units. The 45° cut runs
+ * from `CHAMFER_DEPTH` along one edge to `CHAMFER_DEPTH` along the next.
+ * At the full 0.5 it mirrors rounded's radius for a clean curve-vs-facet
+ * contrast: isolated modules become diamonds and run ends become 45°
+ * chevron points — maximally sharp/"tactical". Only exposed corners are
+ * cut; shared edges within a run stay flush, exactly like rounded mode.
+ * Tunable: drop toward ~0.4 for a flat-edged octagon that still reads as
+ * a shaved square. The E2E decode suite guards scannability.
+ */
+const CHAMFER_DEPTH = 0.5;
 
 /**
  * Cross-axis inset per side for pill modes, in module units. Thins each
@@ -336,6 +350,42 @@ function emitRoundedSubpath(
   return parts.join('');
 }
 
+/**
+ * Emit a per-corner chamfered subpath for one on-module at (qx, qy).
+ * Structurally identical to {@link emitRoundedSubpath} — same exposed-
+ * corner test, same flush shared edges along a run — but each cut is a
+ * straight 45° line (`l`) of depth `CHAMFER_DEPTH` instead of an arc. An
+ * isolated module reads as a square with its corners shaved; a run reads
+ * as a beveled bar.
+ */
+function emitChamferSubpath(
+  matrix: Uint8Array,
+  size: number,
+  x: number,
+  y: number,
+  qx: number,
+  qy: number,
+): string {
+  const c = CHAMFER_DEPTH;
+  const tl = shouldRoundCorner(matrix, size, x, y, 'tl');
+  const tr = shouldRoundCorner(matrix, size, x, y, 'tr');
+  const br = shouldRoundCorner(matrix, size, x, y, 'br');
+  const bl = shouldRoundCorner(matrix, size, x, y, 'bl');
+
+  const parts: string[] = [];
+  parts.push(`M${String(qx + (tl ? c : 0))},${String(qy)}`);
+  parts.push(`H${String(qx + 1 - (tr ? c : 0))}`);
+  if (tr) parts.push(`l${String(c)},${String(c)}`);
+  parts.push(`V${String(qy + 1 - (br ? c : 0))}`);
+  if (br) parts.push(`l${String(-c)},${String(c)}`);
+  parts.push(`H${String(qx + (bl ? c : 0))}`);
+  if (bl) parts.push(`l${String(-c)},${String(-c)}`);
+  parts.push(`V${String(qy + (tl ? c : 0))}`);
+  if (tl) parts.push(`l${String(c)},${String(-c)}`);
+  parts.push('z');
+  return parts.join('');
+}
+
 /** Round to 4 decimals and stringify, trimming float noise from pill coords. */
 function fmt(n: number): string {
   return String(Math.round(n * 1e4) / 1e4);
@@ -456,6 +506,9 @@ export function qrToSvgPath(
       switch (style.moduleShape) {
         case 'rounded':
           subpaths.push(emitRoundedSubpath(matrix, size, x, y, qx, qy));
+          break;
+        case 'chamfer':
+          subpaths.push(emitChamferSubpath(matrix, size, x, y, qx, qy));
           break;
         case 'dot':
           subpaths.push(emitDotSubpath(qx, qy));

@@ -307,6 +307,47 @@ test.describe('qrcodr-web · dot modules decode', () => {
   }
 });
 
+test.describe('qrcodr-web · chamfer modules decode', () => {
+  test('toggling chamfer mode flips the preview path to 45° cut commands', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('payload-input').fill('hello');
+    const previewPath = page.locator('.qr-frame[data-modules] svg path');
+    const squareD = await previewPath.getAttribute('d');
+    expect(squareD).not.toMatch(/l0\.5,0\.5/);
+    await page.getByTestId('module-shape-chamfer').click();
+    const chamferD = await previewPath.getAttribute('d');
+    expect(chamferD).toMatch(/l0\.5,0\.5/);
+  });
+
+  for (const fixture of TEST_PAYLOADS) {
+    test(`chamfer PNG of "${fixture.name}" decodes back to its payload`, async ({ page }) => {
+      await page.goto('/');
+      await page.getByTestId('payload-input').fill(fixture.value);
+      await page.getByTestId('module-shape-chamfer').click();
+      const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        page.getByTestId('export-png').click(),
+      ]);
+      const buffer = await readDownload(download);
+      const decoded = await decodePng(buffer);
+      expect(decoded).toBe(fixture.value);
+    });
+
+    test(`chamfer SVG of "${fixture.name}" decodes back to its payload`, async ({ page }) => {
+      await page.goto('/');
+      await page.getByTestId('payload-input').fill(fixture.value);
+      await page.getByTestId('module-shape-chamfer').click();
+      const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        page.getByTestId('export-svg').click(),
+      ]);
+      const buffer = await readDownload(download);
+      const decoded = await decodeSvg(buffer);
+      expect(decoded).toBe(fixture.value);
+    });
+  }
+});
+
 const PILL_MODES = [
   { name: 'horizontal pill', testId: 'module-shape-horizontal-pill' },
   { name: 'vertical pill', testId: 'module-shape-vertical-pill' },

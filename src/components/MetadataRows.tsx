@@ -146,6 +146,21 @@ function ShapeRow({
         <button
           type="button"
           className="shape-chip"
+          data-active={shape === 'chamfer'}
+          aria-pressed={shape === 'chamfer'}
+          data-testid="module-shape-chamfer"
+          onClick={() => {
+            onChange('chamfer');
+          }}
+        >
+          <span className="shape-chip__glyph" aria-hidden="true">
+            ⬡
+          </span>
+          <span>Chamfer</span>
+        </button>
+        <button
+          type="button"
+          className="shape-chip"
           data-active={shape === 'dot'}
           aria-pressed={shape === 'dot'}
           data-testid="module-shape-dot"
