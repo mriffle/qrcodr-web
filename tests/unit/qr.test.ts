@@ -12,6 +12,8 @@ import {
   isFinderModule,
   isReservedSquare,
   isTimingModule,
+  MODULE_SWATCH_VIEWBOX,
+  moduleSwatchPath,
   qrToSvgPath,
   qrToSvgString,
   sanitizeCenterText,
@@ -701,6 +703,47 @@ describe('qrToSvgString — pill modes', () => {
       });
       expect((d.match(/M[\d-]/g) ?? []).length).toBe(2);
     });
+  });
+});
+
+describe('moduleSwatchPath', () => {
+  test('emits a non-empty path for every shape', () => {
+    for (const shape of [
+      'square',
+      'rounded',
+      'chamfer',
+      'dot',
+      'horizontal-pill',
+      'vertical-pill',
+    ] as const) {
+      expect(moduleSwatchPath(shape).length).toBeGreaterThan(0);
+    }
+  });
+
+  test('each shape produces its characteristic command signature', () => {
+    // square: axis-aligned only, no arcs or diagonal cuts.
+    const square = moduleSwatchPath('square');
+    expect(square).not.toMatch(/[al]/);
+    // rounded/dot: arcs at the full radius.
+    expect(moduleSwatchPath('rounded')).toMatch(/a0\.5,0\.5/);
+    expect(moduleSwatchPath('dot')).toMatch(/a0\.5,0\.5/);
+    // chamfer: straight 45° cut lines, no arcs.
+    expect(moduleSwatchPath('chamfer')).toMatch(/l0\.5,0\.5/);
+    expect(moduleSwatchPath('chamfer')).not.toMatch(/a0\.\d/);
+    // pills: capsule caps at the pill radius.
+    expect(moduleSwatchPath('horizontal-pill')).toMatch(/a0\.42,0\.42/);
+    expect(moduleSwatchPath('vertical-pill')).toMatch(/a0\.42,0\.42/);
+  });
+
+  test('swatches are faithful: no cell is forced square (no reserved fallback)', () => {
+    // Every on-cell in dot mode is a circle, so the swatch has as many
+    // arc-started subpaths as there are diagonal-cut-free squares = 0
+    // square subpaths. A square subpath would look like "Mx,yh1v1h-1z".
+    expect(moduleSwatchPath('dot')).not.toMatch(/h1v1h-1z/);
+  });
+
+  test('exposes a viewBox covering the sample grid', () => {
+    expect(MODULE_SWATCH_VIEWBOX).toMatch(/^[\d.]+ [\d.]+ [\d.]+ [\d.]+$/);
   });
 });
 

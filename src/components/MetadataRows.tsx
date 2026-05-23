@@ -1,5 +1,11 @@
-import { useEffect, useId, useRef, useState } from 'react';
-import { CENTER_TEXT_MAX_LENGTH, type QrResult, type QrStyle } from '../lib/qr';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import {
+  CENTER_TEXT_MAX_LENGTH,
+  MODULE_SWATCH_VIEWBOX,
+  moduleSwatchPath,
+  type QrResult,
+  type QrStyle,
+} from '../lib/qr';
 import { CENTER_ICONS, type CenterIconDef } from '../lib/center-icons';
 
 type Props = {
@@ -61,7 +67,12 @@ export function MetadataRows({
       <Row label="Quiet zone" value="4 mod" />
       <SwatchRow label="Foreground" color={style.foreground} onChange={onForegroundChange} />
       <SwatchRow label="Background" color={style.background} onChange={onBackgroundChange} />
-      <ShapeRow shape={style.moduleShape} onChange={onModuleShapeChange} />
+      <ShapeRow
+        shape={style.moduleShape}
+        foreground={style.foreground}
+        background={style.background}
+        onChange={onModuleShapeChange}
+      />
       <CenterIconRow
         value={centerIcon}
         foreground={style.foreground}
@@ -102,109 +113,148 @@ function CenterTextRow({ value, onChange }: { value: string; onChange: (next: st
   );
 }
 
+const MODULE_SHAPES: { value: QrStyle['moduleShape']; label: string }[] = [
+  { value: 'square', label: 'Square' },
+  { value: 'rounded', label: 'Rounded' },
+  { value: 'chamfer', label: 'Chamfer' },
+  { value: 'dot', label: 'Dot' },
+  { value: 'horizontal-pill', label: 'Horizontal Pill' },
+  { value: 'vertical-pill', label: 'Vertical Pill' },
+];
+
 function ShapeRow({
   shape,
+  foreground,
+  background,
   onChange,
 }: {
   shape: QrStyle['moduleShape'];
+  foreground: string;
+  background: string;
   onChange: (next: QrStyle['moduleShape']) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const [placement, setPlacement] = useState<'down' | 'up'>('down');
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuId = useId();
+  const current = MODULE_SHAPES.find((s) => s.value === shape) ?? {
+    value: 'square' as const,
+    label: 'Square',
+  };
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDocPointer = (e: PointerEvent) => {
+      if (!rootRef.current) return;
+      if (!rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onDocPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDocPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  // Open downward by default, but flip up when the menu would overflow the
+  // viewport bottom and there's more room above. Runs before paint so the
+  // menu never appears in the wrong place.
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current || !menuRef.current) return;
+    const trigger = triggerRef.current.getBoundingClientRect();
+    const menuHeight = menuRef.current.offsetHeight;
+    const margin = 12;
+    const spaceBelow = window.innerHeight - trigger.bottom - margin;
+    const spaceAbove = trigger.top - margin;
+    setPlacement(spaceBelow < menuHeight && spaceAbove > spaceBelow ? 'up' : 'down');
+  }, [open]);
+
   return (
-    <div className="telemetry__row telemetry__row--toggle" data-label="Module shape">
+    <div className="telemetry__row telemetry__row--shape" data-label="Module shape" ref={rootRef}>
       <span className="telemetry__label">Module shape</span>
-      <span className="telemetry__toggle">
+      <span className="shape-picker">
         <button
+          ref={triggerRef}
           type="button"
-          className="shape-chip"
-          data-active={shape === 'square'}
-          aria-pressed={shape === 'square'}
-          data-testid="module-shape-square"
+          className="shape-picker__trigger"
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-controls={menuId}
+          aria-label={`Pick module shape (current ${current.label})`}
+          data-testid="module-shape-trigger"
           onClick={() => {
-            onChange('square');
+            setOpen((o) => !o);
           }}
         >
-          <span className="shape-chip__glyph" aria-hidden="true">
-            ▣
+          <ShapeSwatch shape={current.value} foreground={foreground} background={background} />
+          <span className="shape-picker__current">{current.label}</span>
+          <span className="shape-picker__chevron" aria-hidden="true">
+            ▾
           </span>
-          <span>Square</span>
         </button>
-        <button
-          type="button"
-          className="shape-chip"
-          data-active={shape === 'rounded'}
-          aria-pressed={shape === 'rounded'}
-          data-testid="module-shape-rounded"
-          onClick={() => {
-            onChange('rounded');
-          }}
-        >
-          <span className="shape-chip__glyph" aria-hidden="true">
-            ●
-          </span>
-          <span>Rounded</span>
-        </button>
-        <button
-          type="button"
-          className="shape-chip"
-          data-active={shape === 'chamfer'}
-          aria-pressed={shape === 'chamfer'}
-          data-testid="module-shape-chamfer"
-          onClick={() => {
-            onChange('chamfer');
-          }}
-        >
-          <span className="shape-chip__glyph" aria-hidden="true">
-            ⬡
-          </span>
-          <span>Chamfer</span>
-        </button>
-        <button
-          type="button"
-          className="shape-chip"
-          data-active={shape === 'dot'}
-          aria-pressed={shape === 'dot'}
-          data-testid="module-shape-dot"
-          onClick={() => {
-            onChange('dot');
-          }}
-        >
-          <span className="shape-chip__glyph" aria-hidden="true">
-            ⋮⋮
-          </span>
-          <span>Dot</span>
-        </button>
-        <button
-          type="button"
-          className="shape-chip"
-          data-active={shape === 'horizontal-pill'}
-          aria-pressed={shape === 'horizontal-pill'}
-          data-testid="module-shape-horizontal-pill"
-          onClick={() => {
-            onChange('horizontal-pill');
-          }}
-        >
-          <span className="shape-chip__glyph" aria-hidden="true">
-            ═
-          </span>
-          <span>H-Pill</span>
-        </button>
-        <button
-          type="button"
-          className="shape-chip"
-          data-active={shape === 'vertical-pill'}
-          aria-pressed={shape === 'vertical-pill'}
-          data-testid="module-shape-vertical-pill"
-          onClick={() => {
-            onChange('vertical-pill');
-          }}
-        >
-          <span className="shape-chip__glyph" aria-hidden="true">
-            ‖
-          </span>
-          <span>V-Pill</span>
-        </button>
+        {open && (
+          <div
+            ref={menuRef}
+            id={menuId}
+            className={`shape-picker__menu shape-picker__menu--${placement}`}
+            role="dialog"
+            aria-label="Module shapes"
+          >
+            <div className="shape-picker__grid">
+              {MODULE_SHAPES.map((s) => (
+                <button
+                  key={s.value}
+                  type="button"
+                  className="shape-picker__option"
+                  data-active={s.value === shape}
+                  aria-pressed={s.value === shape}
+                  data-testid={`module-shape-${s.value}`}
+                  title={s.label}
+                  onClick={() => {
+                    onChange(s.value);
+                    setOpen(false);
+                  }}
+                >
+                  <ShapeSwatch shape={s.value} foreground={foreground} background={background} />
+                  <span className="shape-picker__option-label">{s.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </span>
     </div>
+  );
+}
+
+/** Faithful preview swatch of a module shape, rendered via the real path pipeline. */
+function ShapeSwatch({
+  shape,
+  foreground,
+  background,
+}: {
+  shape: QrStyle['moduleShape'];
+  foreground: string;
+  background: string;
+}) {
+  return (
+    <span className="shape-swatch" aria-hidden="true">
+      <svg
+        viewBox={MODULE_SWATCH_VIEWBOX}
+        width="100%"
+        height="100%"
+        focusable="false"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <rect x="0" y="0" width="20" height="20" fill={background} />
+        <path d={moduleSwatchPath(shape)} fill={foreground} />
+      </svg>
+    </span>
   );
 }
 

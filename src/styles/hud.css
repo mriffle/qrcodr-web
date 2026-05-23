@@ -715,35 +715,28 @@
   }
 }
 
-/* === Shape toggle (telemetry chip pair) === */
-.telemetry__row--toggle {
-  align-items: start;
+/* === Shape picker (telemetry preview dropdown) === */
+.telemetry__row--shape {
+  align-items: center;
 }
 
-/* Nudge the label down so its text aligns with the first chip row's text
-   (chips carry 0.32rem of top padding). */
-.telemetry__row--toggle .telemetry__label {
-  padding-top: 0.32rem;
-}
-
-.telemetry__toggle {
+.shape-picker {
+  position: relative;
   display: inline-flex;
-  flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
-  gap: 0.45rem;
   justify-self: end;
 }
 
-.shape-chip {
-  position: relative;
-  background: var(--onyx-rise);
-  border: var(--hair) solid var(--onyx-edge);
-  color: var(--bone-mute);
-  padding: 0.32rem 0.85rem 0.32rem 1.05rem;
-  cursor: pointer;
+.shape-picker__trigger {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.5rem;
+  padding: 0.28rem 0.55rem;
+  background: var(--onyx-rise);
+  border: var(--hair) solid var(--onyx-edge);
+  color: var(--bone);
+  cursor: pointer;
   font-family: var(--font-display);
   font-weight: 500;
   font-size: var(--label-size);
@@ -751,51 +744,177 @@
   letter-spacing: var(--label-track);
   clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
   transition:
-    background-color 140ms var(--ease-out),
-    color 140ms var(--ease-out),
-    border-color 140ms var(--ease-out);
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
-.shape-chip__glyph {
-  color: var(--lime);
-  font-family: var(--font-mono);
-  font-size: 0.9rem;
-  line-height: 1;
-}
-
-.shape-chip[data-active='true'] {
-  background: var(--lime);
-  color: var(--onyx-void);
+.shape-picker__trigger:hover,
+.shape-picker__trigger[aria-expanded='true'] {
   border-color: var(--lime);
   box-shadow:
-    0 0 0 1px var(--lime-trace),
-    0 6px 18px rgba(182, 255, 31, 0.22);
+    0 0 0 1px var(--onyx-void),
+    0 0 8px var(--lime-glow);
 }
 
-.shape-chip[data-active='true'] .shape-chip__glyph {
-  color: var(--onyx-void);
-}
-
-.shape-chip:hover:not([data-active='true']) {
-  color: var(--bone);
-  border-color: var(--lime-trace);
-}
-
-.shape-chip:focus-visible {
+.shape-picker__trigger:focus-visible {
   outline: 2px solid var(--lime);
   outline-offset: 3px;
 }
 
+.shape-picker__chevron {
+  color: var(--lime);
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+.shape-swatch {
+  display: inline-flex;
+  width: 1.7rem;
+  height: 1.7rem;
+  flex: 0 0 auto;
+  border: var(--hair) solid var(--onyx-void);
+  background: var(--onyx-void);
+}
+
+.shape-swatch svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.shape-picker__menu {
+  position: absolute;
+  right: -0.4rem;
+  z-index: 20;
+  width: min(420px, 25rem);
+  padding: 0.7rem;
+  background: var(--onyx-rise);
+  border: var(--hair) solid var(--onyx-edge);
+  box-shadow:
+    0 18px 38px rgba(0, 0, 0, 0.55),
+    0 0 18px rgba(182, 255, 31, 0.12);
+  animation: hud-rise 180ms var(--ease-out) both;
+}
+
+/* Drops down by default; flips up when it would overflow the viewport. */
+.shape-picker__menu--down {
+  top: calc(100% + 8px);
+  border-top: var(--rule) solid var(--lime);
+}
+
+.shape-picker__menu--up {
+  bottom: calc(100% + 8px);
+  border-bottom: var(--rule) solid var(--lime);
+}
+
+.shape-picker__menu::before {
+  content: '';
+  position: absolute;
+  right: 1rem;
+  width: 10px;
+  height: 10px;
+  background: var(--onyx-rise);
+  transform: rotate(45deg);
+}
+
+.shape-picker__menu--down::before {
+  top: -6px;
+  border-left: var(--hair) solid var(--onyx-edge);
+  border-top: var(--rule) solid var(--lime);
+}
+
+.shape-picker__menu--up::before {
+  bottom: -6px;
+  border-right: var(--hair) solid var(--onyx-edge);
+  border-bottom: var(--rule) solid var(--lime);
+}
+
+.shape-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.55rem;
+  /* Last-resort cap so the menu can never exceed the viewport even when
+     neither direction has full room; flip-up handles the common case. */
+  max-height: calc(100vh - 6rem);
+  overflow-y: auto;
+}
+
+.shape-picker__option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.6rem 0.3rem 0.5rem;
+  background: var(--onyx);
+  border: var(--hair) solid var(--onyx-edge);
+  color: var(--bone-mute);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  transition:
+    border-color 120ms ease,
+    color 120ms ease,
+    transform 120ms ease;
+}
+
+.shape-picker__option .shape-swatch {
+  width: 3.8rem;
+  height: 3.8rem;
+}
+
+.shape-picker__option:hover,
+.shape-picker__option:focus-visible {
+  border-color: var(--lime);
+  color: var(--bone);
+  transform: translateY(-1px);
+}
+
+.shape-picker__option:focus-visible {
+  outline: 2px solid var(--lime);
+  outline-offset: 2px;
+}
+
+.shape-picker__option[data-active='true'] {
+  border-color: var(--lime);
+  color: var(--lime);
+  box-shadow: inset 0 0 0 1px var(--lime-trace);
+}
+
+.shape-picker__option-label {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .shape-chip {
+  .shape-picker__trigger,
+  .shape-picker__option {
     transition: none;
+  }
+  .shape-picker__option:hover {
+    transform: none;
+  }
+  .shape-picker__menu {
+    animation: none;
   }
 }
 
 @media (max-width: 920px) {
-  .telemetry__toggle {
+  .shape-picker {
     justify-self: start;
-    justify-content: flex-start;
+  }
+  .shape-picker__menu {
+    right: auto;
+    left: 0;
+  }
+  .shape-picker__menu::before {
+    right: auto;
+    left: 1rem;
   }
 }
 

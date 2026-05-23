@@ -433,7 +433,12 @@ function emitPillRunSubpath(horizontal: boolean, outer: number, i0: number, i1: 
  * as squares and *break* the run, so scanner-critical patterns stay crisp
  * and a pill never bridges across them.
  */
-function pillPath(matrix: Uint8Array, size: number, version: number, horizontal: boolean): string {
+function pillPath(
+  matrix: Uint8Array,
+  size: number,
+  isReserved: (x: number, y: number) => boolean,
+  horizontal: boolean,
+): string {
   const subpaths: string[] = [];
   for (let outer = 0; outer < size; outer++) {
     let runStart = -1;
@@ -442,7 +447,7 @@ function pillPath(matrix: Uint8Array, size: number, version: number, horizontal:
       const x = horizontal ? inner : outer;
       const y = horizontal ? outer : inner;
       const on = inner < size && matrix[y * size + x] === 1;
-      const reserved = on && isReservedSquare(x, y, size, version);
+      const reserved = on && isReserved(x, y);
       const dataOn = on && !reserved;
       if (dataOn) {
         if (runStart === -1) runStart = inner;
@@ -489,8 +494,25 @@ export function qrToSvgPath(
   version: number,
   style: QrStyle,
 ): string {
-  if (style.moduleShape === 'horizontal-pill' || style.moduleShape === 'vertical-pill') {
-    return pillPath(matrix, size, version, style.moduleShape === 'horizontal-pill');
+  return buildModulePath(matrix, size, style.moduleShape, (x, y) =>
+    isReservedSquare(x, y, size, version),
+  );
+}
+
+/**
+ * Render the `d` attribute for a matrix in the given shape. `isReserved`
+ * decides which cells fall back to a crisp square (the real QR uses the
+ * finder/timing/alignment predicate; the swatch sampler passes a
+ * never-reserved stub so every cell takes the chosen shape).
+ */
+function buildModulePath(
+  matrix: Uint8Array,
+  size: number,
+  shape: QrStyle['moduleShape'],
+  isReserved: (x: number, y: number) => boolean,
+): string {
+  if (shape === 'horizontal-pill' || shape === 'vertical-pill') {
+    return pillPath(matrix, size, isReserved, shape === 'horizontal-pill');
   }
   const subpaths: string[] = [];
   for (let y = 0; y < size; y++) {
@@ -499,11 +521,11 @@ export function qrToSvgPath(
       if (matrix[rowOffset + x] !== 1) continue;
       const qx = QUIET_ZONE + x;
       const qy = QUIET_ZONE + y;
-      if (isReservedSquare(x, y, size, version)) {
+      if (isReserved(x, y)) {
         subpaths.push(emitSquareSubpath(qx, qy));
         continue;
       }
-      switch (style.moduleShape) {
+      switch (shape) {
         case 'rounded':
           subpaths.push(emitRoundedSubpath(matrix, size, x, y, qx, qy));
           break;
@@ -517,13 +539,47 @@ export function qrToSvgPath(
           subpaths.push(emitSquareSubpath(qx, qy));
           break;
         default: {
-          const _exhaustive: never = style.moduleShape;
+          const _exhaustive: never = shape;
           return _exhaustive;
         }
       }
     }
   }
   return subpaths.join('');
+}
+
+/**
+ * A small fixed sample matrix for the module-shape picker previews. Packs
+ * a horizontal run, a vertical run, a 2×2 block, and isolated cells into a
+ * 7×7 grid so every shape's character is visible — pill direction, dot
+ * gaps, chamfer facets, rounded blobs.
+ */
+const SWATCH_SIZE = 7;
+// prettier-ignore
+const SWATCH_MATRIX = new Uint8Array([
+  1, 1, 1, 0, 1, 0, 1,
+  0, 0, 0, 0, 1, 0, 0,
+  0, 0, 0, 0, 1, 0, 1,
+  1, 1, 0, 0, 0, 0, 0,
+  1, 1, 0, 1, 1, 1, 0,
+  0, 0, 0, 0, 0, 0, 1,
+  1, 0, 1, 0, 1, 1, 1,
+]);
+
+/**
+ * `viewBox` for a swatch rendered by {@link moduleSwatchPath}. Covers the
+ * sample grid plus a half-module margin so edge shapes (pill caps, chamfer
+ * diamonds) are never clipped.
+ */
+export const MODULE_SWATCH_VIEWBOX = `${String(QUIET_ZONE - 0.5)} ${String(QUIET_ZONE - 0.5)} ${String(SWATCH_SIZE + 1)} ${String(SWATCH_SIZE + 1)}`;
+
+/**
+ * The `d` attribute for a preview swatch of `shape`, rendered through the
+ * same emit pipeline as the real QR (no reserved cells) so a swatch can
+ * never drift from what the export actually produces.
+ */
+export function moduleSwatchPath(shape: QrStyle['moduleShape']): string {
+  return buildModulePath(SWATCH_MATRIX, SWATCH_SIZE, shape, () => false);
 }
 
 /** Pick the right `shape-rendering` attribute for the chosen module shape. */

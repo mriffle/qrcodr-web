@@ -1,4 +1,4 @@
-import { test, expect, type Download } from '@playwright/test';
+import { test, expect, type Download, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import jsQR from 'jsqr';
 import sharp from 'sharp';
@@ -28,6 +28,12 @@ async function decodeSvg(buffer: Buffer, pxSize = 512): Promise<string> {
 async function readDownload(download: Download): Promise<Buffer> {
   const path = await download.path();
   return readFile(path);
+}
+
+/** Open the module-shape dropdown and pick the option with the given test id. */
+async function selectShape(page: Page, optionTestId: string): Promise<void> {
+  await page.getByTestId('module-shape-trigger').click();
+  await page.getByTestId(optionTestId).click();
 }
 
 const TEST_PAYLOADS = [
@@ -232,7 +238,7 @@ test.describe('qrcodr-web · rounded modules decode', () => {
     const previewPath = page.locator('.qr-frame[data-modules] svg path');
     const squareD = await previewPath.getAttribute('d');
     expect(squareD).not.toMatch(/a0\.5,0\.5/);
-    await page.getByTestId('module-shape-rounded').click();
+    await selectShape(page, 'module-shape-rounded');
     const roundedD = await previewPath.getAttribute('d');
     expect(roundedD).toMatch(/a0\.5,0\.5/);
   });
@@ -241,7 +247,7 @@ test.describe('qrcodr-web · rounded modules decode', () => {
     test(`rounded PNG of "${fixture.name}" decodes back to its payload`, async ({ page }) => {
       await page.goto('/');
       await page.getByTestId('payload-input').fill(fixture.value);
-      await page.getByTestId('module-shape-rounded').click();
+      await selectShape(page, 'module-shape-rounded');
       const [download] = await Promise.all([
         page.waitForEvent('download'),
         page.getByTestId('export-png').click(),
@@ -254,7 +260,7 @@ test.describe('qrcodr-web · rounded modules decode', () => {
     test(`rounded SVG of "${fixture.name}" decodes back to its payload`, async ({ page }) => {
       await page.goto('/');
       await page.getByTestId('payload-input').fill(fixture.value);
-      await page.getByTestId('module-shape-rounded').click();
+      await selectShape(page, 'module-shape-rounded');
       const [download] = await Promise.all([
         page.waitForEvent('download'),
         page.getByTestId('export-svg').click(),
@@ -273,7 +279,7 @@ test.describe('qrcodr-web · dot modules decode', () => {
     const previewPath = page.locator('.qr-frame[data-modules] svg path');
     const squareD = await previewPath.getAttribute('d');
     expect(squareD).not.toMatch(/a0\.5,0\.5/);
-    await page.getByTestId('module-shape-dot').click();
+    await selectShape(page, 'module-shape-dot');
     const dotD = await previewPath.getAttribute('d');
     expect(dotD).toMatch(/a0\.5,0\.5/);
   });
@@ -282,7 +288,7 @@ test.describe('qrcodr-web · dot modules decode', () => {
     test(`dot PNG of "${fixture.name}" decodes back to its payload`, async ({ page }) => {
       await page.goto('/');
       await page.getByTestId('payload-input').fill(fixture.value);
-      await page.getByTestId('module-shape-dot').click();
+      await selectShape(page, 'module-shape-dot');
       const [download] = await Promise.all([
         page.waitForEvent('download'),
         page.getByTestId('export-png').click(),
@@ -295,7 +301,7 @@ test.describe('qrcodr-web · dot modules decode', () => {
     test(`dot SVG of "${fixture.name}" decodes back to its payload`, async ({ page }) => {
       await page.goto('/');
       await page.getByTestId('payload-input').fill(fixture.value);
-      await page.getByTestId('module-shape-dot').click();
+      await selectShape(page, 'module-shape-dot');
       const [download] = await Promise.all([
         page.waitForEvent('download'),
         page.getByTestId('export-svg').click(),
@@ -314,7 +320,7 @@ test.describe('qrcodr-web · chamfer modules decode', () => {
     const previewPath = page.locator('.qr-frame[data-modules] svg path');
     const squareD = await previewPath.getAttribute('d');
     expect(squareD).not.toMatch(/l0\.5,0\.5/);
-    await page.getByTestId('module-shape-chamfer').click();
+    await selectShape(page, 'module-shape-chamfer');
     const chamferD = await previewPath.getAttribute('d');
     expect(chamferD).toMatch(/l0\.5,0\.5/);
   });
@@ -323,7 +329,7 @@ test.describe('qrcodr-web · chamfer modules decode', () => {
     test(`chamfer PNG of "${fixture.name}" decodes back to its payload`, async ({ page }) => {
       await page.goto('/');
       await page.getByTestId('payload-input').fill(fixture.value);
-      await page.getByTestId('module-shape-chamfer').click();
+      await selectShape(page, 'module-shape-chamfer');
       const [download] = await Promise.all([
         page.waitForEvent('download'),
         page.getByTestId('export-png').click(),
@@ -336,7 +342,7 @@ test.describe('qrcodr-web · chamfer modules decode', () => {
     test(`chamfer SVG of "${fixture.name}" decodes back to its payload`, async ({ page }) => {
       await page.goto('/');
       await page.getByTestId('payload-input').fill(fixture.value);
-      await page.getByTestId('module-shape-chamfer').click();
+      await selectShape(page, 'module-shape-chamfer');
       const [download] = await Promise.all([
         page.waitForEvent('download'),
         page.getByTestId('export-svg').click(),
@@ -361,7 +367,7 @@ for (const mode of PILL_MODES) {
       const previewPath = page.locator('.qr-frame[data-modules] svg path');
       const squareD = await previewPath.getAttribute('d');
       expect(squareD).not.toMatch(/a0\.42,0\.42/);
-      await page.getByTestId(mode.testId).click();
+      await selectShape(page, mode.testId);
       const pillD = await previewPath.getAttribute('d');
       expect(pillD).toMatch(/a0\.42,0\.42/);
     });
@@ -372,7 +378,7 @@ for (const mode of PILL_MODES) {
       }) => {
         await page.goto('/');
         await page.getByTestId('payload-input').fill(fixture.value);
-        await page.getByTestId(mode.testId).click();
+        await selectShape(page, mode.testId);
         const [download] = await Promise.all([
           page.waitForEvent('download'),
           page.getByTestId('export-png').click(),
@@ -387,7 +393,7 @@ for (const mode of PILL_MODES) {
       }) => {
         await page.goto('/');
         await page.getByTestId('payload-input').fill(fixture.value);
-        await page.getByTestId(mode.testId).click();
+        await selectShape(page, mode.testId);
         const [download] = await Promise.all([
           page.waitForEvent('download'),
           page.getByTestId('export-svg').click(),
@@ -399,3 +405,64 @@ for (const mode of PILL_MODES) {
     }
   });
 }
+
+// Belt-and-suspenders: a non-square module shape combined with a center
+// overlay. The overlay is carved independently of the module path, but
+// these confirm the two features compose and still decode.
+const SHAPE_OVERLAY_COMBOS: {
+  name: string;
+  shape: string;
+  applyOverlay: (page: Page) => Promise<void>;
+}[] = [
+  {
+    name: 'chamfer + heart icon',
+    shape: 'module-shape-chamfer',
+    applyOverlay: async (page) => {
+      await page.getByTestId('center-icon-trigger').click();
+      await page.getByTestId('center-icon-option-heart').click();
+    },
+  },
+  {
+    name: 'vertical pill + center text',
+    shape: 'module-shape-vertical-pill',
+    applyOverlay: async (page) => {
+      await page.getByTestId('center-text-input').fill('v2');
+    },
+  },
+];
+
+test.describe('qrcodr-web · module shape + center overlay decode', () => {
+  for (const combo of SHAPE_OVERLAY_COMBOS) {
+    for (const fixture of TEST_PAYLOADS) {
+      test(`${combo.name} PNG of "${fixture.name}" decodes back to its payload`, async ({
+        page,
+      }) => {
+        await page.goto('/');
+        await page.getByTestId('payload-input').fill(fixture.value);
+        await selectShape(page, combo.shape);
+        await combo.applyOverlay(page);
+        const [download] = await Promise.all([
+          page.waitForEvent('download'),
+          page.getByTestId('export-png').click(),
+        ]);
+        const decoded = await decodePng(await readDownload(download));
+        expect(decoded).toBe(fixture.value);
+      });
+
+      test(`${combo.name} SVG of "${fixture.name}" decodes back to its payload`, async ({
+        page,
+      }) => {
+        await page.goto('/');
+        await page.getByTestId('payload-input').fill(fixture.value);
+        await selectShape(page, combo.shape);
+        await combo.applyOverlay(page);
+        const [download] = await Promise.all([
+          page.waitForEvent('download'),
+          page.getByTestId('export-svg').click(),
+        ]);
+        const decoded = await decodeSvg(await readDownload(download));
+        expect(decoded).toBe(fixture.value);
+      });
+    }
+  }
+});
