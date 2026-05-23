@@ -410,6 +410,78 @@ describe('qrToSvgString — rounded mode', () => {
   });
 });
 
+describe('qrToSvgString — dot mode', () => {
+  const dot = (overrides: Partial<typeof DEFAULT_STYLE> = {}) => ({
+    ...DEFAULT_STYLE,
+    moduleShape: 'dot' as const,
+    ...overrides,
+  });
+
+  test('emits arc commands when moduleShape is dot', () => {
+    const qr = generateQr(valid('https://example.com'));
+    const svg = qrToSvgString(qr, dot());
+    expect(svg).toMatch(/a0\.5,0\.5/);
+  });
+
+  test('dot mode switches shape-rendering to geometricPrecision', () => {
+    const qr = generateQr(valid('https://example.com'));
+    const svg = qrToSvgString(qr, dot());
+    expect(svg).toContain('shape-rendering="geometricPrecision"');
+    expect(svg).not.toContain('shape-rendering="crispEdges"');
+  });
+
+  test('still emits exactly one <path> in dot mode (no antialiasing seams)', () => {
+    const qr = generateQr(valid('https://example.com'));
+    const svg = qrToSvgString(qr, dot());
+    const pathCount = (svg.match(/<path/g) ?? []).length;
+    expect(pathCount).toBe(1);
+  });
+
+  test('preserves one M per on-cell (each dot is still its own subpath)', () => {
+    const qr = generateQr(valid('https://example.com'));
+    const svg = qrToSvgString(qr, dot());
+    const onCells = Array.from(qr.matrix).filter((v) => v === 1).length;
+    const moveCommands = (svg.match(/M[\d-]/g) ?? []).length;
+    expect(moveCommands).toBe(onCells);
+  });
+
+  test('finder pattern subpaths render as squares (no arc commands)', () => {
+    // Same load-bearing structural check as rounded mode — the lock-on
+    // patterns must stay crisp regardless of the data-module shape.
+    const qr = generateQr(valid('https://example.com'));
+    const svg = qrToSvgString(qr, dot());
+    const dMatch = /d="([^"]+)"/.exec(svg);
+    expect(dMatch).not.toBeNull();
+    const d = dMatch?.[1];
+    expect(d).toBeDefined();
+    if (!d) return;
+    const fragments = d.split('M').filter((s) => s.length > 0);
+    let finderSubpaths = 0;
+    for (const frag of fragments) {
+      const coordMatch = /^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/.exec(frag);
+      if (!coordMatch) continue;
+      const qx = Number(coordMatch[1]);
+      const qy = Number(coordMatch[2]);
+      // Dot subpaths start at (qx, qy+0.5); square subpaths start at integer
+      // (qx, qy). Floor recovers the module column either way; row needs a
+      // similar floor since 0.5 only appears in the y of dot starts.
+      const mx = Math.floor(qx) - QUIET_ZONE;
+      const my = Math.floor(qy) - QUIET_ZONE;
+      if (isFinderModule(mx, my, qr.size)) {
+        finderSubpaths++;
+        expect(frag).not.toContain('a0.5');
+      }
+    }
+    expect(finderSubpaths).toBeGreaterThan(10);
+  });
+
+  test('output is deterministic for the same payload', () => {
+    const a = qrToSvgString(generateQr(valid('repeat-me')), dot());
+    const b = qrToSvgString(generateQr(valid('repeat-me')), dot());
+    expect(a).toBe(b);
+  });
+});
+
 describe('sanitizeCenterText', () => {
   test('trims surrounding whitespace', () => {
     expect(sanitizeCenterText('  hi  ')).toBe('hi');

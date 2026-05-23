@@ -4,18 +4,19 @@ import type { ValidatedPayload } from './payload';
 
 /**
  * Visual configuration for QR rendering. `moduleShape` selects whether
- * data modules render as crisp squares or smooth-blob rounded shapes;
- * `canvasShape` is a v2 hook not yet implemented. `centerIcon` is an
- * optional decorative overlay painted in the foreground color, sized
- * to stay safely under the H error-correction budget. `centerText` is
- * a short label (≤ CENTER_TEXT_MAX_LENGTH chars after sanitization)
- * rendered in the same carved-out region; when both are present, text
- * sits below the icon.
+ * data modules render as crisp squares, smooth-blob rounded shapes that
+ * merge into pills along runs, or fully separated circular dots that
+ * never merge; `canvasShape` is a v2 hook not yet implemented.
+ * `centerIcon` is an optional decorative overlay painted in the
+ * foreground color, sized to stay safely under the H error-correction
+ * budget. `centerText` is a short label (≤ CENTER_TEXT_MAX_LENGTH chars
+ * after sanitization) rendered in the same carved-out region; when both
+ * are present, text sits below the icon.
  */
 export type QrStyle = {
   foreground: string;
   background: string;
-  moduleShape: 'square' | 'rounded'; // v2: 'dot'
+  moduleShape: 'square' | 'rounded' | 'dot';
   canvasShape: 'square'; // v2: 'circle' | 'hex'
   centerIcon: { id: string; innerSvg: string } | null;
   centerText: string | null;
@@ -269,6 +270,19 @@ function emitSquareSubpath(qx: number, qy: number): string {
 }
 
 /**
+ * Emit a circle subpath inscribed in the (qx, qy) module cell. Two
+ * 180° arcs traced clockwise from the left mid-point back to itself.
+ * Unlike rounded mode, dots never merge with neighbors — every on-cell
+ * is a discrete circle, which is what gives dot mode its distinctive
+ * polka-dot look. Single leading `M` preserves the one-subpath-per-cell
+ * invariant the count tests rely on.
+ */
+function emitDotSubpath(qx: number, qy: number): string {
+  const r = MODULE_RADIUS;
+  return `M${String(qx)},${String(qy + r)}a${String(r)},${String(r)} 0 0 1 1,0a${String(r)},${String(r)} 0 0 1 -1,0z`;
+}
+
+/**
  * Emit a per-corner rounded subpath for one on-module at (qx, qy). At
  * `MODULE_RADIUS = 0.5`, four rounded corners produce a true circle and
  * a horizontal run produces a true pill (the shared edges between
@@ -311,8 +325,8 @@ function emitRoundedSubpath(
  * independently and leave faint sub-pixel gaps between modules).
  *
  * Reserved cells (finder, timing, alignment) render as squares even when
- * `style.moduleShape === 'rounded'` so the patterns scanners rely on
- * stay crisp.
+ * `style.moduleShape` is `'rounded'` or `'dot'` so the patterns scanners
+ * rely on stay crisp.
  */
 export function qrToSvgPath(
   matrix: Uint8Array,
@@ -321,17 +335,26 @@ export function qrToSvgPath(
   style: QrStyle,
 ): string {
   const subpaths: string[] = [];
-  const rounded = style.moduleShape === 'rounded';
   for (let y = 0; y < size; y++) {
     const rowOffset = y * size;
     for (let x = 0; x < size; x++) {
       if (matrix[rowOffset + x] !== 1) continue;
       const qx = QUIET_ZONE + x;
       const qy = QUIET_ZONE + y;
-      if (rounded && !isReservedSquare(x, y, size, version)) {
-        subpaths.push(emitRoundedSubpath(matrix, size, x, y, qx, qy));
-      } else {
+      if (isReservedSquare(x, y, size, version)) {
         subpaths.push(emitSquareSubpath(qx, qy));
+        continue;
+      }
+      switch (style.moduleShape) {
+        case 'rounded':
+          subpaths.push(emitRoundedSubpath(matrix, size, x, y, qx, qy));
+          break;
+        case 'dot':
+          subpaths.push(emitDotSubpath(qx, qy));
+          break;
+        case 'square':
+          subpaths.push(emitSquareSubpath(qx, qy));
+          break;
       }
     }
   }
@@ -340,7 +363,7 @@ export function qrToSvgPath(
 
 /** Pick the right `shape-rendering` attribute for the chosen module shape. */
 export function shapeRenderingFor(style: QrStyle): 'crispEdges' | 'geometricPrecision' {
-  return style.moduleShape === 'rounded' ? 'geometricPrecision' : 'crispEdges';
+  return style.moduleShape === 'square' ? 'crispEdges' : 'geometricPrecision';
 }
 
 /**

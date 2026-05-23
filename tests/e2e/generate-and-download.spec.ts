@@ -265,3 +265,44 @@ test.describe('qrcodr-web · rounded modules decode', () => {
     });
   }
 });
+
+test.describe('qrcodr-web · dot modules decode', () => {
+  test('toggling dot mode flips the preview path to use arc commands', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('payload-input').fill('hello');
+    const previewPath = page.locator('.qr-frame[data-modules] svg path');
+    const squareD = await previewPath.getAttribute('d');
+    expect(squareD).not.toMatch(/a0\.5,0\.5/);
+    await page.getByTestId('module-shape-dot').click();
+    const dotD = await previewPath.getAttribute('d');
+    expect(dotD).toMatch(/a0\.5,0\.5/);
+  });
+
+  for (const fixture of TEST_PAYLOADS) {
+    test(`dot PNG of "${fixture.name}" decodes back to its payload`, async ({ page }) => {
+      await page.goto('/');
+      await page.getByTestId('payload-input').fill(fixture.value);
+      await page.getByTestId('module-shape-dot').click();
+      const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        page.getByTestId('export-png').click(),
+      ]);
+      const buffer = await readDownload(download);
+      const decoded = await decodePng(buffer);
+      expect(decoded).toBe(fixture.value);
+    });
+
+    test(`dot SVG of "${fixture.name}" decodes back to its payload`, async ({ page }) => {
+      await page.goto('/');
+      await page.getByTestId('payload-input').fill(fixture.value);
+      await page.getByTestId('module-shape-dot').click();
+      const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        page.getByTestId('export-svg').click(),
+      ]);
+      const buffer = await readDownload(download);
+      const decoded = await decodeSvg(buffer);
+      expect(decoded).toBe(fixture.value);
+    });
+  }
+});

@@ -143,6 +143,21 @@ function ShapeRow({
           </span>
           <span>Rounded</span>
         </button>
+        <button
+          type="button"
+          className="shape-chip"
+          data-active={shape === 'dot'}
+          aria-pressed={shape === 'dot'}
+          data-testid="module-shape-dot"
+          onClick={() => {
+            onChange('dot');
+          }}
+        >
+          <span className="shape-chip__glyph" aria-hidden="true">
+            ⋮⋮
+          </span>
+          <span>Dot</span>
+        </button>
       </span>
     </div>
   );
