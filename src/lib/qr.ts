@@ -5,8 +5,10 @@ import type { ValidatedPayload } from './payload';
 /**
  * Visual configuration for QR rendering. `moduleShape` selects whether
  * data modules render as crisp squares, smooth-blob rounded shapes that
- * merge into pills along runs, or fully separated circular dots that
- * never merge; `canvasShape` is a v2 hook not yet implemented.
+ * merge into pills along runs, fully separated circular dots that never
+ * merge, or capsule "pills" that fuse adjacent on-cells along a single
+ * axis (`horizontal-pill` / `vertical-pill`) with a small cross-axis gap;
+ * `canvasShape` is a v2 hook not yet implemented.
  * `centerIcon` is an optional decorative overlay painted in the
  * foreground color, sized to stay safely under the H error-correction
  * budget. `centerText` is a short label (≤ CENTER_TEXT_MAX_LENGTH chars
@@ -16,7 +18,7 @@ import type { ValidatedPayload } from './payload';
 export type QrStyle = {
   foreground: string;
   background: string;
-  moduleShape: 'square' | 'rounded' | 'dot';
+  moduleShape: 'square' | 'rounded' | 'dot' | 'horizontal-pill' | 'vertical-pill';
   canvasShape: 'square'; // v2: 'circle' | 'hex'
   centerIcon: { id: string; innerSvg: string } | null;
   centerText: string | null;
@@ -38,6 +40,23 @@ export const QUIET_ZONE = 4;
 
 /** Fixed module-rounding radius in module units. 0.5 = full circle / pill. */
 const MODULE_RADIUS = 0.5;
+
+/**
+ * Cross-axis inset per side for pill modes, in module units. Thins each
+ * capsule to `1 - 2 * PILL_GAP` so parallel runs get a visible gap
+ * between them without trimming any module center (decoders sample
+ * centers, so this stays comfortably scannable — far less aggressive
+ * than `dot` mode, which removes the corners entirely). The E2E decode
+ * round-trip is the guardrail if this is ever pushed larger.
+ */
+const PILL_GAP = 0.08;
+
+/**
+ * Pill thickness (and dot/cap diameter) in module units. Cap radius is
+ * half this. Length-1 runs render as a circle of this radius so isolated
+ * modules match the capsule thickness exactly.
+ */
+const PILL_RADIUS = (1 - 2 * PILL_GAP) / 2;
 
 /**
  * Center-icon side length as a fraction of the QR matrix side. ~22% keeps
@@ -317,16 +336,102 @@ function emitRoundedSubpath(
   return parts.join('');
 }
 
+/** Round to 4 decimals and stringify, trimming float noise from pill coords. */
+function fmt(n: number): string {
+  return String(Math.round(n * 1e4) / 1e4);
+}
+
+/**
+ * Emit a circle of radius `PILL_RADIUS` centered at (cx, cy). Used for
+ * length-1 pill runs so an isolated module matches the capsule thickness
+ * (it would otherwise be a stubby one-cell stadium). Single leading `M`
+ * keeps it one subpath.
+ */
+function emitPillCircleSubpath(cx: number, cy: number): string {
+  const r = PILL_RADIUS;
+  return `M${fmt(cx - r)},${fmt(cy)}a${fmt(r)},${fmt(r)} 0 0 1 ${fmt(2 * r)},0a${fmt(r)},${fmt(r)} 0 0 1 ${fmt(-2 * r)},0z`;
+}
+
+/**
+ * Emit one capsule (stadium) subpath for a run of ≥2 on-cells. `outer`
+ * is the fixed line index (row for horizontal, column for vertical),
+ * `i0..i1` the inclusive run extent along the merge axis. The capsule
+ * fills the full run length along its axis and is inset by `PILL_GAP`
+ * per side on the cross axis, so parallel runs get a visible gap; caps
+ * are true semicircles of radius `PILL_RADIUS`.
+ */
+function emitPillRunSubpath(horizontal: boolean, outer: number, i0: number, i1: number): string {
+  const r = PILL_RADIUS;
+  const span = 2 * r; // cross-axis thickness = 1 - 2 * PILL_GAP
+  if (horizontal) {
+    const left = QUIET_ZONE + i0;
+    const right = QUIET_ZONE + i1 + 1;
+    const top = QUIET_ZONE + outer + PILL_GAP;
+    return `M${fmt(left + r)},${fmt(top)}H${fmt(right - r)}a${fmt(r)},${fmt(r)} 0 0 1 0,${fmt(span)}H${fmt(left + r)}a${fmt(r)},${fmt(r)} 0 0 1 0,${fmt(-span)}z`;
+  }
+  const top = QUIET_ZONE + i0;
+  const bottom = QUIET_ZONE + i1 + 1;
+  const leftEdge = QUIET_ZONE + outer + PILL_GAP;
+  return `M${fmt(leftEdge)},${fmt(top + r)}a${fmt(r)},${fmt(r)} 0 0 1 ${fmt(span)},0V${fmt(bottom - r)}a${fmt(r)},${fmt(r)} 0 0 1 ${fmt(-span)},0z`;
+}
+
+/**
+ * Build the pill `d` attribute by scanning the matrix line-by-line along
+ * the merge axis (rows for horizontal, columns for vertical) and fusing
+ * maximal runs of adjacent data on-cells into one capsule each. Length-1
+ * runs become circles. Reserved cells (finder, timing, alignment) render
+ * as squares and *break* the run, so scanner-critical patterns stay crisp
+ * and a pill never bridges across them.
+ */
+function pillPath(matrix: Uint8Array, size: number, version: number, horizontal: boolean): string {
+  const subpaths: string[] = [];
+  for (let outer = 0; outer < size; outer++) {
+    let runStart = -1;
+    // One extra step (inner === size) flushes a run that reaches the edge.
+    for (let inner = 0; inner <= size; inner++) {
+      const x = horizontal ? inner : outer;
+      const y = horizontal ? outer : inner;
+      const on = inner < size && matrix[y * size + x] === 1;
+      const reserved = on && isReservedSquare(x, y, size, version);
+      const dataOn = on && !reserved;
+      if (dataOn) {
+        if (runStart === -1) runStart = inner;
+        continue;
+      }
+      if (runStart !== -1) {
+        if (inner - 1 === runStart) {
+          const cx = QUIET_ZONE + (horizontal ? runStart : outer) + 0.5;
+          const cy = QUIET_ZONE + (horizontal ? outer : runStart) + 0.5;
+          subpaths.push(emitPillCircleSubpath(cx, cy));
+        } else {
+          subpaths.push(emitPillRunSubpath(horizontal, outer, runStart, inner - 1));
+        }
+        runStart = -1;
+      }
+      if (reserved) {
+        subpaths.push(
+          emitSquareSubpath(
+            QUIET_ZONE + (horizontal ? inner : outer),
+            QUIET_ZONE + (horizontal ? outer : inner),
+          ),
+        );
+      }
+    }
+  }
+  return subpaths.join('');
+}
+
 /**
  * Build the combined `d` attribute for every on-module in the matrix.
- * One subpath per on-cell, all concatenated into a single path string —
- * this is what avoids antialiasing seams when the SVG is rasterized to
- * PNG (separate `<rect>` elements get their edges antialiased
- * independently and leave faint sub-pixel gaps between modules).
+ * One subpath per on-cell for square/rounded/dot; pill modes emit one
+ * subpath per merged run instead. All concatenated into a single path
+ * string — this is what avoids antialiasing seams when the SVG is
+ * rasterized to PNG (separate `<rect>` elements get their edges
+ * antialiased independently and leave faint sub-pixel gaps between
+ * modules).
  *
- * Reserved cells (finder, timing, alignment) render as squares even when
- * `style.moduleShape` is `'rounded'` or `'dot'` so the patterns scanners
- * rely on stay crisp.
+ * Reserved cells (finder, timing, alignment) render as squares for every
+ * non-square `moduleShape` so the patterns scanners rely on stay crisp.
  */
 export function qrToSvgPath(
   matrix: Uint8Array,
@@ -334,6 +439,9 @@ export function qrToSvgPath(
   version: number,
   style: QrStyle,
 ): string {
+  if (style.moduleShape === 'horizontal-pill' || style.moduleShape === 'vertical-pill') {
+    return pillPath(matrix, size, version, style.moduleShape === 'horizontal-pill');
+  }
   const subpaths: string[] = [];
   for (let y = 0; y < size; y++) {
     const rowOffset = y * size;
@@ -355,6 +463,10 @@ export function qrToSvgPath(
         case 'square':
           subpaths.push(emitSquareSubpath(qx, qy));
           break;
+        default: {
+          const _exhaustive: never = style.moduleShape;
+          return _exhaustive;
+        }
       }
     }
   }

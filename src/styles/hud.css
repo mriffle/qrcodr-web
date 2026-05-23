@@ -717,11 +717,19 @@
 
 /* === Shape toggle (telemetry chip pair) === */
 .telemetry__row--toggle {
-  align-items: center;
+  align-items: start;
+}
+
+/* Nudge the label down so its text aligns with the first chip row's text
+   (chips carry 0.32rem of top padding). */
+.telemetry__row--toggle .telemetry__label {
+  padding-top: 0.32rem;
 }
 
 .telemetry__toggle {
   display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 0.45rem;
   justify-self: end;
 }
@@ -787,6 +795,7 @@
 @media (max-width: 920px) {
   .telemetry__toggle {
     justify-self: start;
+    justify-content: flex-start;
   }
 }
 

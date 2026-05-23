@@ -306,3 +306,55 @@ test.describe('qrcodr-web · dot modules decode', () => {
     });
   }
 });
+
+const PILL_MODES = [
+  { name: 'horizontal pill', testId: 'module-shape-horizontal-pill' },
+  { name: 'vertical pill', testId: 'module-shape-vertical-pill' },
+] as const;
+
+for (const mode of PILL_MODES) {
+  test.describe(`qrcodr-web · ${mode.name} modules decode`, () => {
+    test(`toggling ${mode.name} mode flips the preview path to capsule arcs`, async ({ page }) => {
+      await page.goto('/');
+      await page.getByTestId('payload-input').fill('hello');
+      const previewPath = page.locator('.qr-frame[data-modules] svg path');
+      const squareD = await previewPath.getAttribute('d');
+      expect(squareD).not.toMatch(/a0\.42,0\.42/);
+      await page.getByTestId(mode.testId).click();
+      const pillD = await previewPath.getAttribute('d');
+      expect(pillD).toMatch(/a0\.42,0\.42/);
+    });
+
+    for (const fixture of TEST_PAYLOADS) {
+      test(`${mode.name} PNG of "${fixture.name}" decodes back to its payload`, async ({
+        page,
+      }) => {
+        await page.goto('/');
+        await page.getByTestId('payload-input').fill(fixture.value);
+        await page.getByTestId(mode.testId).click();
+        const [download] = await Promise.all([
+          page.waitForEvent('download'),
+          page.getByTestId('export-png').click(),
+        ]);
+        const buffer = await readDownload(download);
+        const decoded = await decodePng(buffer);
+        expect(decoded).toBe(fixture.value);
+      });
+
+      test(`${mode.name} SVG of "${fixture.name}" decodes back to its payload`, async ({
+        page,
+      }) => {
+        await page.goto('/');
+        await page.getByTestId('payload-input').fill(fixture.value);
+        await page.getByTestId(mode.testId).click();
+        const [download] = await Promise.all([
+          page.waitForEvent('download'),
+          page.getByTestId('export-svg').click(),
+        ]);
+        const buffer = await readDownload(download);
+        const decoded = await decodeSvg(buffer);
+        expect(decoded).toBe(fixture.value);
+      });
+    }
+  });
+}

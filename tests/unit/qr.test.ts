@@ -12,6 +12,7 @@ import {
   isFinderModule,
   isReservedSquare,
   isTimingModule,
+  qrToSvgPath,
   qrToSvgString,
   sanitizeCenterText,
   shouldRoundCorner,
@@ -479,6 +480,150 @@ describe('qrToSvgString — dot mode', () => {
     const a = qrToSvgString(generateQr(valid('repeat-me')), dot());
     const b = qrToSvgString(generateQr(valid('repeat-me')), dot());
     expect(a).toBe(b);
+  });
+});
+
+describe('qrToSvgString — pill modes', () => {
+  const hPill = (overrides: Partial<typeof DEFAULT_STYLE> = {}) => ({
+    ...DEFAULT_STYLE,
+    moduleShape: 'horizontal-pill' as const,
+    ...overrides,
+  });
+  const vPill = (overrides: Partial<typeof DEFAULT_STYLE> = {}) => ({
+    ...DEFAULT_STYLE,
+    moduleShape: 'vertical-pill' as const,
+    ...overrides,
+  });
+
+  test('emit arc commands (capsule caps) at the pill radius', () => {
+    const qr = generateQr(valid('https://example.com'));
+    // PILL_RADIUS = (1 - 2*0.08)/2 = 0.42.
+    expect(qrToSvgString(qr, hPill())).toMatch(/a0\.42,0\.42/);
+    expect(qrToSvgString(qr, vPill())).toMatch(/a0\.42,0\.42/);
+  });
+
+  test('switch shape-rendering to geometricPrecision', () => {
+    const qr = generateQr(valid('https://example.com'));
+    for (const svg of [qrToSvgString(qr, hPill()), qrToSvgString(qr, vPill())]) {
+      expect(svg).toContain('shape-rendering="geometricPrecision"');
+      expect(svg).not.toContain('shape-rendering="crispEdges"');
+    }
+  });
+
+  test('still emit exactly one <path> (no antialiasing seams)', () => {
+    const qr = generateQr(valid('https://example.com'));
+    for (const svg of [qrToSvgString(qr, hPill()), qrToSvgString(qr, vPill())]) {
+      expect((svg.match(/<path/g) ?? []).length).toBe(1);
+    }
+  });
+
+  test('merge adjacent on-cells into runs (fewer subpaths than on-cells)', () => {
+    // The defining property of pill mode: at least one run of length >= 2
+    // fuses, so the subpath (M) count must be strictly below the on-cell
+    // count. A real QR always has horizontal and vertical runs.
+    const qr = generateQr(valid('https://example.com'));
+    const onCells = Array.from(qr.matrix).filter((v) => v === 1).length;
+    for (const svg of [qrToSvgString(qr, hPill()), qrToSvgString(qr, vPill())]) {
+      const moveCommands = (svg.match(/M[\d-]/g) ?? []).length;
+      expect(moveCommands).toBeLessThan(onCells);
+    }
+  });
+
+  test('finder pattern subpaths render as squares (no arc commands)', () => {
+    // Same load-bearing structural check as the other shapes: reserved
+    // cells must stay crisp squares and a pill must never bridge them.
+    const qr = generateQr(valid('https://example.com'));
+    for (const svg of [qrToSvgString(qr, hPill()), qrToSvgString(qr, vPill())]) {
+      const d = /d="([^"]+)"/.exec(svg)?.[1];
+      expect(d).toBeDefined();
+      if (!d) continue;
+      const fragments = d.split('M').filter((s) => s.length > 0);
+      let finderSubpaths = 0;
+      for (const frag of fragments) {
+        const coordMatch = /^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/.exec(frag);
+        if (!coordMatch) continue;
+        const mx = Math.floor(Number(coordMatch[1])) - QUIET_ZONE;
+        const my = Math.floor(Number(coordMatch[2])) - QUIET_ZONE;
+        if (isFinderModule(mx, my, qr.size)) {
+          finderSubpaths++;
+          expect(frag).not.toContain('a0.42');
+        }
+      }
+      expect(finderSubpaths).toBeGreaterThan(10);
+    }
+  });
+
+  test('output is deterministic for the same payload', () => {
+    expect(qrToSvgString(generateQr(valid('repeat-me')), hPill())).toBe(
+      qrToSvgString(generateQr(valid('repeat-me')), hPill()),
+    );
+  });
+
+  // Direct qrToSvgPath tests on synthetic matrices — full control over run
+  // layout, with data cells chosen away from v1 reserved regions
+  // (finders x/y<7 or >=14; timing row/col 6).
+  describe('run geometry (synthetic matrices)', () => {
+    const SIZE = 21;
+    const VERSION = 1;
+    const mk = () => new Uint8Array(SIZE * SIZE);
+    const set = (m: Uint8Array, x: number, y: number) => {
+      m[y * SIZE + x] = 1;
+    };
+
+    test('a horizontal run of 3 becomes one capsule subpath', () => {
+      const m = mk();
+      set(m, 10, 10);
+      set(m, 11, 10);
+      set(m, 12, 10);
+      const d = qrToSvgPath(m, SIZE, VERSION, {
+        ...DEFAULT_STYLE,
+        moduleShape: 'horizontal-pill',
+      });
+      expect((d.match(/M[\d-]/g) ?? []).length).toBe(1); // one merged run
+      expect(d).toContain('H'); // straight top/bottom edges
+      expect(d).toMatch(/a0\.42,0\.42/); // semicircular caps
+    });
+
+    test('a vertical run of 3 becomes one capsule subpath', () => {
+      const m = mk();
+      set(m, 10, 10);
+      set(m, 10, 11);
+      set(m, 10, 12);
+      const d = qrToSvgPath(m, SIZE, VERSION, {
+        ...DEFAULT_STYLE,
+        moduleShape: 'vertical-pill',
+      });
+      expect((d.match(/M[\d-]/g) ?? []).length).toBe(1);
+      expect(d).toContain('V'); // straight left/right edges
+      expect(d).toMatch(/a0\.42,0\.42/);
+    });
+
+    test('a length-1 run renders as a circle, not a stubby capsule', () => {
+      const m = mk();
+      set(m, 10, 10); // isolated module
+      const d = qrToSvgPath(m, SIZE, VERSION, {
+        ...DEFAULT_STYLE,
+        moduleShape: 'horizontal-pill',
+      });
+      // A circle is two 180° arcs and no straight edge commands.
+      expect((d.match(/a0\.42,0\.42/g) ?? []).length).toBe(2);
+      expect(d).not.toContain('H');
+      expect(d).not.toContain('V');
+    });
+
+    test('an off cell splits a row into two separate runs', () => {
+      const m = mk();
+      set(m, 10, 10);
+      set(m, 11, 10);
+      // gap at x=12
+      set(m, 13, 10);
+      set(m, 14, 10);
+      const d = qrToSvgPath(m, SIZE, VERSION, {
+        ...DEFAULT_STYLE,
+        moduleShape: 'horizontal-pill',
+      });
+      expect((d.match(/M[\d-]/g) ?? []).length).toBe(2);
+    });
   });
 });
 

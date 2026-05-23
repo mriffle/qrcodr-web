@@ -158,6 +158,36 @@ function ShapeRow({
           </span>
           <span>Dot</span>
         </button>
+        <button
+          type="button"
+          className="shape-chip"
+          data-active={shape === 'horizontal-pill'}
+          aria-pressed={shape === 'horizontal-pill'}
+          data-testid="module-shape-horizontal-pill"
+          onClick={() => {
+            onChange('horizontal-pill');
+          }}
+        >
+          <span className="shape-chip__glyph" aria-hidden="true">
+            ═
+          </span>
+          <span>H-Pill</span>
+        </button>
+        <button
+          type="button"
+          className="shape-chip"
+          data-active={shape === 'vertical-pill'}
+          aria-pressed={shape === 'vertical-pill'}
+          data-testid="module-shape-vertical-pill"
+          onClick={() => {
+            onChange('vertical-pill');
+          }}
+        >
+          <span className="shape-chip__glyph" aria-hidden="true">
+            ‖
+          </span>
+          <span>V-Pill</span>
+        </button>
       </span>
     </div>
   );
