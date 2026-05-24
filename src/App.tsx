@@ -19,6 +19,7 @@ export function App() {
   const [foreground, setForeground] = useState(DEFAULT_STYLE.foreground);
   const [background, setBackground] = useState(DEFAULT_STYLE.background);
   const [moduleShape, setModuleShape] = useState<QrStyle['moduleShape']>(DEFAULT_STYLE.moduleShape);
+  const [finderShape, setFinderShape] = useState<QrStyle['finderShape']>(DEFAULT_STYLE.finderShape);
   const [centerIcon, setCenterIcon] = useState<CenterIconDef>(NONE_ICON);
   const [centerText, setCenterText] = useState('');
 
@@ -29,11 +30,12 @@ export function App() {
       foreground,
       background,
       moduleShape,
+      finderShape,
       centerIcon:
         centerIcon.id === 'none' ? null : { id: centerIcon.id, innerSvg: centerIcon.innerSvg },
       centerText: sanitized.length > 0 ? sanitized : null,
     };
-  }, [foreground, background, moduleShape, centerIcon, centerText]);
+  }, [foreground, background, moduleShape, finderShape, centerIcon, centerText]);
 
   const validation = useMemo(() => validatePayload(rawPayload), [rawPayload]);
 
@@ -60,13 +62,13 @@ export function App() {
         <PayloadInput value={rawPayload} onChange={setRawPayload} error={error} />
         <MetadataRows
           qr={qr}
-          rawPayload={rawPayload}
           style={style}
           centerIcon={centerIcon}
           centerText={centerText}
           onForegroundChange={setForeground}
           onBackgroundChange={setBackground}
           onModuleShapeChange={setModuleShape}
+          onFinderShapeChange={setFinderShape}
           onCenterIconChange={setCenterIcon}
           onCenterTextChange={setCenterText}
         />

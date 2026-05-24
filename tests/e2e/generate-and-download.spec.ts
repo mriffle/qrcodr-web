@@ -36,6 +36,12 @@ async function selectShape(page: Page, optionTestId: string): Promise<void> {
   await page.getByTestId(optionTestId).click();
 }
 
+/** Open the finder-shape dropdown and pick the option with the given test id. */
+async function selectFinderShape(page: Page, optionTestId: string): Promise<void> {
+  await page.getByTestId('finder-shape-trigger').click();
+  await page.getByTestId(optionTestId).click();
+}
+
 const TEST_PAYLOADS = [
   { name: 'simple URL', value: 'https://example.com' },
   {
@@ -405,6 +411,78 @@ for (const mode of PILL_MODES) {
     }
   });
 }
+
+const FINDER_SHAPES = [
+  { name: 'rounded', testId: 'finder-shape-rounded' },
+  { name: 'octagon', testId: 'finder-shape-chamfer' },
+  { name: 'bullseye', testId: 'finder-shape-circle' },
+] as const;
+
+for (const fs of FINDER_SHAPES) {
+  test.describe(`qrcodr-web · ${fs.name} finder decode`, () => {
+    for (const fixture of TEST_PAYLOADS) {
+      test(`${fs.name} finder PNG of "${fixture.name}" decodes back to its payload`, async ({
+        page,
+      }) => {
+        await page.goto('/');
+        await page.getByTestId('payload-input').fill(fixture.value);
+        await selectFinderShape(page, fs.testId);
+        const [download] = await Promise.all([
+          page.waitForEvent('download'),
+          page.getByTestId('export-png').click(),
+        ]);
+        const decoded = await decodePng(await readDownload(download));
+        expect(decoded).toBe(fixture.value);
+      });
+
+      test(`${fs.name} finder SVG of "${fixture.name}" decodes back to its payload`, async ({
+        page,
+      }) => {
+        await page.goto('/');
+        await page.getByTestId('payload-input').fill(fixture.value);
+        await selectFinderShape(page, fs.testId);
+        const [download] = await Promise.all([
+          page.waitForEvent('download'),
+          page.getByTestId('export-svg').click(),
+        ]);
+        const decoded = await decodeSvg(await readDownload(download));
+        expect(decoded).toBe(fixture.value);
+      });
+    }
+  });
+}
+
+test.describe('qrcodr-web · finder shape preview + composition', () => {
+  test('selecting bullseye flips the preview path to concentric finder arcs', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('payload-input').fill('https://example.com');
+    const previewPath = page.locator('.qr-frame[data-modules] svg path');
+    expect(await previewPath.getAttribute('d')).not.toMatch(/a3\.5,3\.5/);
+    await selectFinderShape(page, 'finder-shape-circle');
+    expect(await previewPath.getAttribute('d')).toMatch(/a3\.5,3\.5/);
+  });
+
+  // The hardest composition: shaped finders + a non-square module shape + a
+  // center overlay, all at once.
+  for (const fixture of TEST_PAYLOADS) {
+    test(`bullseye finder + rounded modules + heart icon PNG of "${fixture.name}" decodes`, async ({
+      page,
+    }) => {
+      await page.goto('/');
+      await page.getByTestId('payload-input').fill(fixture.value);
+      await selectFinderShape(page, 'finder-shape-circle');
+      await selectShape(page, 'module-shape-rounded');
+      await page.getByTestId('center-icon-trigger').click();
+      await page.getByTestId('center-icon-option-heart').click();
+      const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        page.getByTestId('export-png').click(),
+      ]);
+      const decoded = await decodePng(await readDownload(download));
+      expect(decoded).toBe(fixture.value);
+    });
+  }
+});
 
 // Belt-and-suspenders: a non-square module shape combined with a center
 // overlay. The overlay is carved independently of the module path, but

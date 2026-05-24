@@ -12,6 +12,8 @@ import {
   isFinderModule,
   isReservedSquare,
   isTimingModule,
+  FINDER_SWATCH_VIEWBOX,
+  finderSwatchPath,
   MODULE_SWATCH_VIEWBOX,
   moduleSwatchPath,
   qrToSvgPath,
@@ -744,6 +746,106 @@ describe('moduleSwatchPath', () => {
 
   test('exposes a viewBox covering the sample grid', () => {
     expect(MODULE_SWATCH_VIEWBOX).toMatch(/^[\d.]+ [\d.]+ [\d.]+ [\d.]+$/);
+  });
+});
+
+describe('qrToSvgString — finder shapes', () => {
+  const SQUARE_SUBPATH = /h1v1h-1z/g;
+  const countSquares = (d: string) => (d.match(SQUARE_SUBPATH) ?? []).length;
+
+  test('square finderShape is byte-identical to the default (no behavior drift)', () => {
+    const qr = generateQr(valid('https://example.com'));
+    expect(qrToSvgString(qr, { ...DEFAULT_STYLE, finderShape: 'square' })).toBe(
+      qrToSvgString(qr, DEFAULT_STYLE),
+    );
+  });
+
+  test('only shaped finders add fill-rule="evenodd"', () => {
+    const qr = generateQr(valid('https://example.com'));
+    expect(qrToSvgString(qr, DEFAULT_STYLE)).not.toContain('fill-rule');
+    for (const finderShape of ['rounded', 'chamfer', 'circle'] as const) {
+      expect(qrToSvgString(qr, { ...DEFAULT_STYLE, finderShape })).toContain('fill-rule="evenodd"');
+    }
+  });
+
+  test('shaped finders use geometricPrecision rendering even with square modules', () => {
+    const qr = generateQr(valid('https://example.com'));
+    expect(qrToSvgString(qr, { ...DEFAULT_STYLE, finderShape: 'square' })).toContain(
+      'shape-rendering="crispEdges"',
+    );
+    expect(qrToSvgString(qr, { ...DEFAULT_STYLE, finderShape: 'circle' })).toContain(
+      'shape-rendering="geometricPrecision"',
+    );
+  });
+
+  test('shaping the finders removes per-cell finder squares (they become composites)', () => {
+    const qr = generateQr(valid('https://example.com'));
+    const square = qrToSvgPath(qr.matrix, qr.size, qr.version, DEFAULT_STYLE);
+    const circle = qrToSvgPath(qr.matrix, qr.size, qr.version, {
+      ...DEFAULT_STYLE,
+      finderShape: 'circle',
+    });
+    // The three 7×7 finders contribute many unit squares in square mode; in
+    // circle mode they are drawn as composite rings instead.
+    expect(countSquares(circle)).toBeLessThan(countSquares(square));
+  });
+
+  test('circle finders emit the locked finder radii 3.5 / 2.5 / 1.5', () => {
+    const qr = generateQr(valid('https://example.com'));
+    const svg = qrToSvgString(qr, { ...DEFAULT_STYLE, finderShape: 'circle' });
+    expect(svg).toContain('a3.5,3.5'); // outer ring
+    expect(svg).toContain('a2.5,2.5'); // light gap
+    expect(svg).toContain('a1.5,1.5'); // eye
+  });
+
+  test('circle alignment patterns emit the locked 0.5 eye radius (version ≥ 2)', () => {
+    const qr = generateQr(valid('https://example.com'));
+    expect(qr.version).toBeGreaterThanOrEqual(2); // sanity: this payload has alignment patterns
+    // moduleShape is square here, so the only r=0.5 arcs come from alignment eyes.
+    const svg = qrToSvgString(qr, { ...DEFAULT_STYLE, finderShape: 'circle' });
+    expect(svg).toContain('a0.5,0.5');
+  });
+
+  test('chamfer finders emit 45° cut lines and no arcs in the locator path', () => {
+    // Isolate the locator contribution via the swatch (one clean finder).
+    const swatch = finderSwatchPath('chamfer');
+    expect(swatch).toContain('L'); // straight diagonal cuts
+    expect(swatch).not.toMatch(/a\d/); // no arcs
+  });
+
+  test('output is deterministic for each shape', () => {
+    for (const finderShape of ['rounded', 'chamfer', 'circle'] as const) {
+      const style = { ...DEFAULT_STYLE, finderShape };
+      expect(qrToSvgString(generateQr(valid('repeat-me')), style)).toBe(
+        qrToSvgString(generateQr(valid('repeat-me')), style),
+      );
+    }
+  });
+});
+
+describe('finderSwatchPath', () => {
+  test('emits a non-empty path for every finder shape', () => {
+    for (const shape of ['square', 'rounded', 'chamfer', 'circle'] as const) {
+      expect(finderSwatchPath(shape).length).toBeGreaterThan(0);
+    }
+  });
+
+  test('each shape produces its characteristic signature', () => {
+    // square: nested axis-aligned blocks (7/5/3 wide), no arcs or cuts.
+    const square = finderSwatchPath('square');
+    expect(square).toContain('h7');
+    expect(square).not.toMatch(/[aL]/);
+    // rounded: outer corner radius = 7 * 0.28 = 1.96.
+    expect(finderSwatchPath('rounded')).toContain('a1.96,1.96');
+    // circle: locked concentric radii.
+    expect(finderSwatchPath('circle')).toContain('a3.5,3.5');
+    // chamfer: straight cuts, no arcs.
+    expect(finderSwatchPath('chamfer')).toMatch(/L/);
+    expect(finderSwatchPath('chamfer')).not.toMatch(/a\d/);
+  });
+
+  test('exposes a viewBox covering one finder plus margin', () => {
+    expect(FINDER_SWATCH_VIEWBOX).toMatch(/^-?[\d.]+ -?[\d.]+ [\d.]+ [\d.]+$/);
   });
 });
 

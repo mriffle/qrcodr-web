@@ -1,6 +1,8 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import {
   CENTER_TEXT_MAX_LENGTH,
+  FINDER_SWATCH_VIEWBOX,
+  finderSwatchPath,
   MODULE_SWATCH_VIEWBOX,
   moduleSwatchPath,
   type QrResult,
@@ -10,13 +12,13 @@ import { CENTER_ICONS, type CenterIconDef } from '../lib/center-icons';
 
 type Props = {
   qr: QrResult | null;
-  rawPayload: string;
   style: QrStyle;
   centerIcon: CenterIconDef;
   centerText: string;
   onForegroundChange: (next: string) => void;
   onBackgroundChange: (next: string) => void;
   onModuleShapeChange: (next: QrStyle['moduleShape']) => void;
+  onFinderShapeChange: (next: QrStyle['finderShape']) => void;
   onCenterIconChange: (next: CenterIconDef) => void;
   onCenterTextChange: (next: string) => void;
 };
@@ -27,17 +29,16 @@ type Props = {
  */
 export function MetadataRows({
   qr,
-  rawPayload,
   style,
   centerIcon,
   centerText,
   onForegroundChange,
   onBackgroundChange,
   onModuleShapeChange,
+  onFinderShapeChange,
   onCenterIconChange,
   onCenterTextChange,
 }: Props) {
-  const trimmed = rawPayload.trim();
   return (
     <section className="telemetry" aria-label="QR telemetry">
       <div className="telemetry__title">
@@ -46,11 +47,6 @@ export function MetadataRows({
         </span>
         Telemetry :: Spec
       </div>
-      <Row
-        label="Payload"
-        value={trimmed.length > 0 ? trimmed : '—'}
-        muted={trimmed.length === 0}
-      />
       <Row label="Encoding" value="byte · utf-8" />
       <Row label="EC level" value="H · 30%" highlight />
       <Row
@@ -67,11 +63,27 @@ export function MetadataRows({
       <Row label="Quiet zone" value="4 mod" />
       <SwatchRow label="Foreground" color={style.foreground} onChange={onForegroundChange} />
       <SwatchRow label="Background" color={style.background} onChange={onBackgroundChange} />
-      <ShapeRow
-        shape={style.moduleShape}
-        foreground={style.foreground}
-        background={style.background}
+      <ShapePickerRow
+        label="Module shape"
+        testIdPrefix="module-shape"
+        menuLabel="Module shapes"
+        value={style.moduleShape}
+        options={MODULE_SHAPES}
         onChange={onModuleShapeChange}
+        renderSwatch={(shape) => (
+          <ShapeSwatch shape={shape} foreground={style.foreground} background={style.background} />
+        )}
+      />
+      <ShapePickerRow
+        label="Finder shape"
+        testIdPrefix="finder-shape"
+        menuLabel="Finder shapes"
+        value={style.finderShape}
+        options={FINDER_SHAPES}
+        onChange={onFinderShapeChange}
+        renderSwatch={(shape) => (
+          <FinderSwatch shape={shape} foreground={style.foreground} background={style.background} />
+        )}
       />
       <CenterIconRow
         value={centerIcon}
@@ -122,16 +134,38 @@ const MODULE_SHAPES: { value: QrStyle['moduleShape']; label: string }[] = [
   { value: 'vertical-pill', label: 'Vertical Pill' },
 ];
 
-function ShapeRow({
-  shape,
-  foreground,
-  background,
+// Only the three shapes proven to scan as reliably as square (guarded by
+// tests/scannability). Diamond/dots/star were measured to regress in the field
+// and are deliberately excluded. Governs finders AND alignment patterns.
+const FINDER_SHAPES: { value: QrStyle['finderShape']; label: string }[] = [
+  { value: 'square', label: 'Square' },
+  { value: 'rounded', label: 'Rounded' },
+  { value: 'chamfer', label: 'Octagon' },
+  { value: 'circle', label: 'Bullseye' },
+];
+
+/**
+ * Generic shape-picker row: a swatch-preview trigger that opens a grid of
+ * swatch options. Drives both the module-shape and finder-shape controls; the
+ * `testIdPrefix` keeps stable per-option test ids (`<prefix>-trigger`,
+ * `<prefix>-<value>`).
+ */
+function ShapePickerRow<T extends string>({
+  label,
+  testIdPrefix,
+  menuLabel,
+  value,
+  options,
   onChange,
+  renderSwatch,
 }: {
-  shape: QrStyle['moduleShape'];
-  foreground: string;
-  background: string;
-  onChange: (next: QrStyle['moduleShape']) => void;
+  label: string;
+  testIdPrefix: string;
+  menuLabel: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (next: T) => void;
+  renderSwatch: (value: T) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [placement, setPlacement] = useState<'down' | 'up'>('down');
@@ -139,10 +173,7 @@ function ShapeRow({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
-  const current = MODULE_SHAPES.find((s) => s.value === shape) ?? {
-    value: 'square' as const,
-    label: 'Square',
-  };
+  const current = options.find((s) => s.value === value) ?? options[0];
 
   useEffect(() => {
     if (!open) return undefined;
@@ -174,9 +205,11 @@ function ShapeRow({
     setPlacement(spaceBelow < menuHeight && spaceAbove > spaceBelow ? 'up' : 'down');
   }, [open]);
 
+  if (!current) return null;
+
   return (
-    <div className="telemetry__row telemetry__row--shape" data-label="Module shape" ref={rootRef}>
-      <span className="telemetry__label">Module shape</span>
+    <div className="telemetry__row telemetry__row--shape" data-label={label} ref={rootRef}>
+      <span className="telemetry__label">{label}</span>
       <span className="shape-picker">
         <button
           ref={triggerRef}
@@ -185,13 +218,13 @@ function ShapeRow({
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={menuId}
-          aria-label={`Pick module shape (current ${current.label})`}
-          data-testid="module-shape-trigger"
+          aria-label={`Pick ${label.toLowerCase()} (current ${current.label})`}
+          data-testid={`${testIdPrefix}-trigger`}
           onClick={() => {
             setOpen((o) => !o);
           }}
         >
-          <ShapeSwatch shape={current.value} foreground={foreground} background={background} />
+          {renderSwatch(current.value)}
           <span className="shape-picker__current">{current.label}</span>
           <span className="shape-picker__chevron" aria-hidden="true">
             ▾
@@ -203,24 +236,24 @@ function ShapeRow({
             id={menuId}
             className={`shape-picker__menu shape-picker__menu--${placement}`}
             role="dialog"
-            aria-label="Module shapes"
+            aria-label={menuLabel}
           >
             <div className="shape-picker__grid">
-              {MODULE_SHAPES.map((s) => (
+              {options.map((s) => (
                 <button
                   key={s.value}
                   type="button"
                   className="shape-picker__option"
-                  data-active={s.value === shape}
-                  aria-pressed={s.value === shape}
-                  data-testid={`module-shape-${s.value}`}
+                  data-active={s.value === value}
+                  aria-pressed={s.value === value}
+                  data-testid={`${testIdPrefix}-${s.value}`}
                   title={s.label}
                   onClick={() => {
                     onChange(s.value);
                     setOpen(false);
                   }}
                 >
-                  <ShapeSwatch shape={s.value} foreground={foreground} background={background} />
+                  {renderSwatch(s.value)}
                   <span className="shape-picker__option-label">{s.label}</span>
                 </button>
               ))}
@@ -229,6 +262,32 @@ function ShapeRow({
         )}
       </span>
     </div>
+  );
+}
+
+/** Faithful preview swatch of a finder shape, rendered via the real path pipeline. */
+function FinderSwatch({
+  shape,
+  foreground,
+  background,
+}: {
+  shape: QrStyle['finderShape'];
+  foreground: string;
+  background: string;
+}) {
+  return (
+    <span className="shape-swatch" aria-hidden="true">
+      <svg
+        viewBox={FINDER_SWATCH_VIEWBOX}
+        width="100%"
+        height="100%"
+        focusable="false"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <rect x="-0.5" y="-0.5" width="8" height="8" fill={background} />
+        <path d={finderSwatchPath(shape)} fill={foreground} fillRule="evenodd" />
+      </svg>
+    </span>
   );
 }
 

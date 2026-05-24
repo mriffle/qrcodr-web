@@ -81,7 +81,14 @@ export function QrDrawing({ qr, style }: Props) {
           aria-label={`QR code, ${String(size)} by ${String(size)} modules, version ${String(version)}`}
         >
           <rect x={0} y={0} width={total} height={total} fill={style.background} />
-          <path d={d} fill={style.foreground} />
+          {/* evenodd matches qrToSvgString so composite finder rings carve
+              their gap; only needed for shaped finders (disjoint module
+              subpaths render identically under either rule). */}
+          <path
+            d={d}
+            fill={style.foreground}
+            {...(style.finderShape === 'square' ? {} : { fillRule: 'evenodd' as const })}
+          />
           {layout && (
             <rect
               x={layout.padX}

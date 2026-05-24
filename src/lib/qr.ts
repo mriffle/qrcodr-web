@@ -21,6 +21,17 @@ export type QrStyle = {
   foreground: string;
   background: string;
   moduleShape: 'square' | 'rounded' | 'chamfer' | 'dot' | 'horizontal-pill' | 'vertical-pill';
+  /**
+   * Shape of the structural locator patterns — the three finder ("position")
+   * patterns AND every alignment pattern (they're the same family, so one
+   * control governs both). `square` is the v1 behavior (per-module squares).
+   * `rounded`/`chamfer`/`circle` draw each pattern as a composite ring + eye.
+   * Only these three deviations ship: they were measured to scan as reliably
+   * as square across two decoders (jsQR + ZXing) under heavy field degradation
+   * — guarded by tests/scannability. Diamond/dots/star regressed and are
+   * intentionally absent. Timing patterns always stay square.
+   */
+  finderShape: 'square' | 'rounded' | 'chamfer' | 'circle';
   canvasShape: 'square'; // v2: 'circle' | 'hex'
   centerIcon: { id: string; innerSvg: string } | null;
   centerText: string | null;
@@ -124,6 +135,7 @@ export const DEFAULT_STYLE: QrStyle = {
   foreground: '#0f1b3d',
   background: '#f0ede2',
   moduleShape: 'square',
+  finderShape: 'square',
   canvasShape: 'square',
   centerIcon: null,
   centerText: null,
@@ -168,9 +180,10 @@ function moduleAt(matrix: Uint8Array, size: number, x: number, y: number): 0 | 1
 
 /**
  * True if module (x,y) is inside one of the three 7×7 finder patterns
- * (top-left, top-right, bottom-left). Finder patterns must stay square
- * for scanner reliability — their 1:1:3:1:1 dark/light/dark/light/dark
- * ratio is what decoders lock onto.
+ * (top-left, top-right, bottom-left). Used to render finders specially: as
+ * squares by default, or as composite ring+eye shapes for a non-square
+ * `finderShape`. Their 1:1:3:1:1 dark/light/dark/light/dark ratio is what
+ * decoders lock onto, so only ratio-preserving shapes are offered.
  */
 export function isFinderModule(x: number, y: number, size: number): boolean {
   // Top-left
@@ -243,9 +256,9 @@ function getAlignmentCenters(version: number): readonly [number, number][] {
 
 /**
  * True if module (x,y) is inside any alignment pattern's 5×5 block.
- * Versions ≥ 2 have at least one. Kept square for the same reason as
- * finders — decoders use these to re-synchronize the sampling grid
- * under distortion.
+ * Versions ≥ 2 have at least one. Rendered the same way as finders (square,
+ * or a composite shape for a non-square `finderShape`) — decoders use these
+ * to re-synchronize the sampling grid under distortion.
  */
 export function isAlignmentModule(x: number, y: number, _size: number, version: number): boolean {
   const centers = getAlignmentCenters(version);
@@ -436,7 +449,7 @@ function emitPillRunSubpath(horizontal: boolean, outer: number, i0: number, i1: 
 function pillPath(
   matrix: Uint8Array,
   size: number,
-  isReserved: (x: number, y: number) => boolean,
+  classify: (x: number, y: number) => CellKind,
   horizontal: boolean,
 ): string {
   const subpaths: string[] = [];
@@ -447,8 +460,8 @@ function pillPath(
       const x = horizontal ? inner : outer;
       const y = horizontal ? outer : inner;
       const on = inner < size && matrix[y * size + x] === 1;
-      const reserved = on && isReserved(x, y);
-      const dataOn = on && !reserved;
+      const kind: CellKind = on ? classify(x, y) : 'skip';
+      const dataOn = kind === 'module';
       if (dataOn) {
         if (runStart === -1) runStart = inner;
         continue;
@@ -463,7 +476,7 @@ function pillPath(
         }
         runStart = -1;
       }
-      if (reserved) {
+      if (on && kind === 'square') {
         subpaths.push(
           emitSquareSubpath(
             QUIET_ZONE + (horizontal ? inner : outer),
@@ -477,6 +490,128 @@ function pillPath(
 }
 
 /**
+ * Per-cell render classification used by the path builders.
+ * - `module`: render in the chosen `moduleShape`.
+ * - `square`: force a crisp square (timing patterns; all locator cells when
+ *   `finderShape` is `square`).
+ * - `skip`: emit nothing here — the cell belongs to a finder/alignment pattern
+ *   that is drawn separately as a composite shape (when `finderShape` ≠ square).
+ */
+type CellKind = 'module' | 'square' | 'skip';
+
+/**
+ * Corner factors for the rounded/chamfer locator shapes, as a fraction of
+ * each sub-shape's side length. These values were measured safe in the field —
+ * do not retune without re-running the scannability guard (tests/scannability).
+ * The circle variant has no tunable:
+ * its radii are fixed by the pattern geometry (ring s/2, gap (s-2)/2, eye
+ * (s-4)/2), which is exactly what preserves the 1:1:3:1:1 detection ratio.
+ */
+const EYE_ROUNDED = { outer: 0.28, gap: 0.28, eye: 0.45 } as const;
+const EYE_CHAMFER = { outer: 0.24, gap: 0.24, eye: 0.4 } as const;
+
+/** Rounded square, side `s`, corner radius `r`, clockwise. */
+function roundedRectPath(x: number, y: number, s: number, r: number): string {
+  const rr = Math.min(r, s / 2);
+  return (
+    `M${fmt(x + rr)},${fmt(y)}` +
+    `H${fmt(x + s - rr)}a${fmt(rr)},${fmt(rr)} 0 0 1 ${fmt(rr)},${fmt(rr)}` +
+    `V${fmt(y + s - rr)}a${fmt(rr)},${fmt(rr)} 0 0 1 ${fmt(-rr)},${fmt(rr)}` +
+    `H${fmt(x + rr)}a${fmt(rr)},${fmt(rr)} 0 0 1 ${fmt(-rr)},${fmt(-rr)}` +
+    `V${fmt(y + rr)}a${fmt(rr)},${fmt(rr)} 0 0 1 ${fmt(rr)},${fmt(-rr)}z`
+  );
+}
+
+/** Chamfered square (octagon): each corner cut at 45° by depth `c`, clockwise. */
+function chamferRectPath(x: number, y: number, s: number, c: number): string {
+  const cc = Math.min(c, s / 2);
+  return (
+    `M${fmt(x + cc)},${fmt(y)}` +
+    `H${fmt(x + s - cc)}L${fmt(x + s)},${fmt(y + cc)}` +
+    `V${fmt(y + s - cc)}L${fmt(x + s - cc)},${fmt(y + s)}` +
+    `H${fmt(x + cc)}L${fmt(x)},${fmt(y + s - cc)}` +
+    `V${fmt(y + cc)}z`
+  );
+}
+
+/** Circle of radius `r` centered at (cx, cy). */
+function ringCirclePath(cx: number, cy: number, r: number): string {
+  return `M${fmt(cx - r)},${fmt(cy)}a${fmt(r)},${fmt(r)} 0 1 0 ${fmt(2 * r)},0a${fmt(r)},${fmt(r)} 0 1 0 ${fmt(-2 * r)},0z`;
+}
+
+/**
+ * Emit one composite locator pattern (outer block · light gap · solid eye) at
+ * box origin (x, y) of side `s`, in the given shape. Used for both finders
+ * (s=7, eye 3×3) and alignment patterns (s=5, eye 1×1). The three nested
+ * contours are all drawn clockwise; the enclosing `<path>` uses
+ * `fill-rule="evenodd"` so the middle (gap) contour reads as a hole. This is
+ * the production port of the experiment's `framePattern`.
+ */
+function framePattern(x: number, y: number, s: number, shape: QrStyle['finderShape']): string {
+  const cx = x + s / 2;
+  const cy = y + s / 2;
+  const eyeSide = s - 4; // 3 for a finder, 1 for an alignment pattern
+  const gapSide = s - 2;
+  switch (shape) {
+    case 'square':
+      return (
+        squareBlock(x, y, s) +
+        squareBlock(x + 1, y + 1, gapSide) +
+        squareBlock(x + 2, y + 2, eyeSide)
+      );
+    case 'rounded':
+      return (
+        roundedRectPath(x, y, s, s * EYE_ROUNDED.outer) +
+        roundedRectPath(x + 1, y + 1, gapSide, gapSide * EYE_ROUNDED.gap) +
+        roundedRectPath(x + 2, y + 2, eyeSide, eyeSide * EYE_ROUNDED.eye)
+      );
+    case 'chamfer':
+      return (
+        chamferRectPath(x, y, s, s * EYE_CHAMFER.outer) +
+        chamferRectPath(x + 1, y + 1, gapSide, gapSide * EYE_CHAMFER.gap) +
+        chamferRectPath(x + 2, y + 2, eyeSide, eyeSide * EYE_CHAMFER.eye)
+      );
+    case 'circle':
+      return (
+        ringCirclePath(cx, cy, s / 2) +
+        ringCirclePath(cx, cy, gapSide / 2) +
+        ringCirclePath(cx, cy, eyeSide / 2)
+      );
+    default: {
+      const _exhaustive: never = shape;
+      return _exhaustive;
+    }
+  }
+}
+
+/** A closed square subpath of arbitrary side `s` at (x, y). */
+function squareBlock(x: number, y: number, s: number): string {
+  return `M${fmt(x)},${fmt(y)}h${fmt(s)}v${fmt(s)}h${fmt(-s)}z`;
+}
+
+/**
+ * Append the composite finder (×3) and alignment (×N) patterns for a shaped
+ * `finderShape`. Coordinates include the quiet-zone offset, matching the
+ * module path. Returns '' for `square` (those patterns are drawn per-cell).
+ */
+function locatorPatternsPath(size: number, version: number, shape: QrStyle['finderShape']): string {
+  if (shape === 'square') return '';
+  const q = QUIET_ZONE;
+  const parts: string[] = [];
+  for (const [ox, oy] of [
+    [0, 0],
+    [size - 7, 0],
+    [0, size - 7],
+  ] as const) {
+    parts.push(framePattern(q + ox, q + oy, 7, shape));
+  }
+  for (const [cx, cy] of getAlignmentCenters(version)) {
+    parts.push(framePattern(q + cx - 2, q + cy - 2, 5, shape));
+  }
+  return parts.join('');
+}
+
+/**
  * Build the combined `d` attribute for every on-module in the matrix.
  * One subpath per on-cell for square/rounded/dot; pill modes emit one
  * subpath per merged run instead. All concatenated into a single path
@@ -485,8 +620,9 @@ function pillPath(
  * antialiased independently and leave faint sub-pixel gaps between
  * modules).
  *
- * Reserved cells (finder, timing, alignment) render as squares for every
- * non-square `moduleShape` so the patterns scanners rely on stay crisp.
+ * Timing cells always render as crisp squares. Finder/alignment cells render
+ * as squares when `finderShape` is `square`; otherwise they are skipped here
+ * and drawn as composite shapes by {@link locatorPatternsPath}.
  */
 export function qrToSvgPath(
   matrix: Uint8Array,
@@ -494,9 +630,18 @@ export function qrToSvgPath(
   version: number,
   style: QrStyle,
 ): string {
-  return buildModulePath(matrix, size, style.moduleShape, (x, y) =>
-    isReservedSquare(x, y, size, version),
-  );
+  const shaped = style.finderShape !== 'square';
+  const classify = (x: number, y: number): CellKind => {
+    // Locator patterns first: alignment patterns can overlap the timing line,
+    // and there the pattern (not the timing strip) owns the cell.
+    if (isFinderModule(x, y, size) || isAlignmentModule(x, y, size, version)) {
+      return shaped ? 'skip' : 'square';
+    }
+    if (isTimingModule(x, y, size)) return 'square';
+    return 'module';
+  };
+  const modules = buildModulePath(matrix, size, style.moduleShape, classify);
+  return shaped ? modules + locatorPatternsPath(size, version, style.finderShape) : modules;
 }
 
 /**
@@ -509,19 +654,21 @@ function buildModulePath(
   matrix: Uint8Array,
   size: number,
   shape: QrStyle['moduleShape'],
-  isReserved: (x: number, y: number) => boolean,
+  classify: (x: number, y: number) => CellKind,
 ): string {
   if (shape === 'horizontal-pill' || shape === 'vertical-pill') {
-    return pillPath(matrix, size, isReserved, shape === 'horizontal-pill');
+    return pillPath(matrix, size, classify, shape === 'horizontal-pill');
   }
   const subpaths: string[] = [];
   for (let y = 0; y < size; y++) {
     const rowOffset = y * size;
     for (let x = 0; x < size; x++) {
       if (matrix[rowOffset + x] !== 1) continue;
+      const kind = classify(x, y);
+      if (kind === 'skip') continue;
       const qx = QUIET_ZONE + x;
       const qy = QUIET_ZONE + y;
-      if (isReserved(x, y)) {
+      if (kind === 'square') {
         subpaths.push(emitSquareSubpath(qx, qy));
         continue;
       }
@@ -579,12 +726,29 @@ export const MODULE_SWATCH_VIEWBOX = `${String(QUIET_ZONE - 0.5)} ${String(QUIET
  * never drift from what the export actually produces.
  */
 export function moduleSwatchPath(shape: QrStyle['moduleShape']): string {
-  return buildModulePath(SWATCH_MATRIX, SWATCH_SIZE, shape, () => false);
+  return buildModulePath(SWATCH_MATRIX, SWATCH_SIZE, shape, () => 'module');
 }
 
-/** Pick the right `shape-rendering` attribute for the chosen module shape. */
+/**
+ * `viewBox` for a finder-shape swatch: a single 7×7 finder pattern plus a
+ * half-module margin so circle/octagon edges aren't clipped.
+ */
+export const FINDER_SWATCH_VIEWBOX = '-0.5 -0.5 8 8';
+
+/**
+ * The `d` for a preview swatch of a finder shape — one finder pattern rendered
+ * through the same {@link framePattern} the export uses, so the picker can't
+ * drift from the artifact. Caller must set `fill-rule="evenodd"`.
+ */
+export function finderSwatchPath(shape: QrStyle['finderShape']): string {
+  return framePattern(0, 0, 7, shape);
+}
+
+/** Pick the right `shape-rendering` attribute for the chosen style. */
 export function shapeRenderingFor(style: QrStyle): 'crispEdges' | 'geometricPrecision' {
-  return style.moduleShape === 'square' ? 'crispEdges' : 'geometricPrecision';
+  return style.moduleShape === 'square' && style.finderShape === 'square'
+    ? 'crispEdges'
+    : 'geometricPrecision';
 }
 
 /**
@@ -776,11 +940,16 @@ export function qrToSvgString(qr: QrResult, style: QrStyle): string {
   const shapeRendering = shapeRenderingFor(style);
   const overlay = renderCenterOverlay(style, size);
   const fontDefs = style.centerText && style.centerText.length > 0 ? renderFontDefs() : '';
+  // evenodd is needed so composite locator rings carve their gap as a hole. It
+  // is added only when shaped: all module subpaths are mutually disjoint, so
+  // evenodd and nonzero are identical for them — this keeps `square` output
+  // byte-for-byte unchanged.
+  const fillRule = style.finderShape === 'square' ? '' : ` fill-rule="evenodd"`;
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${String(total)} ${String(total)}" shape-rendering="${shapeRendering}">`,
     fontDefs,
     `<rect width="${String(total)}" height="${String(total)}" fill="${style.background}"/>`,
-    `<path fill="${style.foreground}" d="${d}"/>`,
+    `<path fill="${style.foreground}"${fillRule} d="${d}"/>`,
     overlay,
     `</svg>`,
   ].join('');

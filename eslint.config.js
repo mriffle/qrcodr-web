@@ -6,7 +6,16 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['dist', 'node_modules', 'coverage', 'playwright-report', 'test-results'],
+    ignores: [
+      'dist',
+      'node_modules',
+      'coverage',
+      'playwright-report',
+      'test-results',
+      // Node-environment scannability harness: uses Node-only globals (Buffer,
+      // sharp) and lives outside the tsconfig projects; run via vitest, not tsc.
+      'tests/scannability',
+    ],
   },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommendedTypeChecked],
