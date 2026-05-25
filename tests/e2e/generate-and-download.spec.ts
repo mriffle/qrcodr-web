@@ -90,6 +90,19 @@ test.describe('qrcodr-web · UI behavior', () => {
     await input.fill('hello');
     await expect(page.locator('.qr-frame[data-modules]')).toBeVisible();
   });
+
+  test('telemetry panel shows live version/modules and collapses when emptied', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    const version = page.locator('.telemetry__row[data-label="Version"] .telemetry__value');
+    const modules = page.locator('.telemetry__row[data-label="Modules"] .telemetry__value');
+    await expect(version).toHaveText(/^v\d+$/);
+    await expect(modules).toHaveText(/^\d+ × \d+$/);
+    await page.getByTestId('payload-input').fill('');
+    await expect(version).toHaveText('—');
+    await expect(modules).toHaveText('—');
+  });
 });
 
 test.describe('qrcodr-web · PNG download decode', () => {
@@ -362,6 +375,48 @@ test.describe('qrcodr-web · chamfer modules decode', () => {
       expect(decoded).toBe(fixture.value);
     });
   }
+});
+
+// Every non-square module shape; each must round-trip back to the exact
+// square path string (CLAUDE.md: square output is byte-for-byte identical
+// regardless of prior selection).
+const NON_SQUARE_MODULE_SHAPES = [
+  'rounded',
+  'chamfer',
+  'dot',
+  'horizontal-pill',
+  'vertical-pill',
+] as const;
+
+test.describe('qrcodr-web · shape round-trip', () => {
+  for (const shape of NON_SQUARE_MODULE_SHAPES) {
+    test(`module shape ${shape} → square restores the byte-identical path`, async ({ page }) => {
+      await page.goto('/');
+      await page.getByTestId('payload-input').fill('hello');
+      const previewPath = page.locator('.qr-frame[data-modules] svg path');
+      const squareD = await previewPath.getAttribute('d');
+      expect(squareD).toBeTruthy();
+      await selectShape(page, `module-shape-${shape}`);
+      // The shaped path must actually differ — otherwise the round-trip proves nothing.
+      expect(await previewPath.getAttribute('d')).not.toBe(squareD);
+      await selectShape(page, 'module-shape-square');
+      expect(await previewPath.getAttribute('d')).toBe(squareD);
+    });
+  }
+
+  test('finder shape bullseye → square restores the byte-identical path', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('payload-input').fill('hello');
+    const previewPath = page.locator('.qr-frame[data-modules] svg path');
+    const squareD = await previewPath.getAttribute('d');
+    expect(squareD).toBeTruthy();
+    await selectFinderShape(page, 'finder-shape-circle');
+    expect(await previewPath.getAttribute('d')).not.toBe(squareD);
+    await selectFinderShape(page, 'finder-shape-square');
+    // Shaped finders emit fill-rule="evenodd"; returning to square must collapse
+    // the path back to the plain (non-evenodd) string, byte-for-byte.
+    expect(await previewPath.getAttribute('d')).toBe(squareD);
+  });
 });
 
 const PILL_MODES = [
