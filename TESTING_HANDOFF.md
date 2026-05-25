@@ -17,14 +17,18 @@ alongside:
 ## 1. TL;DR
 
 This project tests QR codes for **readability**, not just "the bytes round-trip
-once." It generates codes with shaped modules/finders and center overlays, then:
+once." It generates codes with shaped modules/finders and center overlays
+(icon, text, or both), then:
 
 - decodes them with **seven independent engines** (4 in-process JS/wasm + 3
   native: OpenCV, WeChat, Apple Vision),
 - after pushing the **real exported artifacts** through a **field-degradation
   battery** (blur, glare, rotation, true perspective, JPEG, noise, occlusion…),
-- across **three browsers** for the canvas-based PNG export path,
-- with **field-reliability thresholds enforced** as regression guards,
+- across **three browsers** for the canvas-based PNG export path — and the
+  **real `<canvas>` PNG is fed to Apple Vision** on a macOS job (the actual iOS
+  detector, not just a sharp-rasterized SVG),
+- with **field-reliability thresholds enforced** as regression guards (including
+  a center-overlay error-correction-budget bound),
 - a **generated, freshness-guarded** Markdown report committed to the repo, and
 - **CI that gates GitHub Pages deployment on every test job passing.**
 
@@ -49,16 +53,18 @@ shaped finder. So the suite is built around two ideas:
 
 ## 3. Test layers
 
-Five layers. The first three run in `npm run test` (vitest); the gated native
+The unit + scannability layers run in `npm run test` (vitest); the gated native
 layers self-skip without their toolchain; E2E is separate (Playwright).
 
-| Layer                  | Location                                                             | Runner                   | What it guards                                                                                           |
-| ---------------------- | -------------------------------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------- |
-| Unit & component       | `tests/unit/*.test.ts(x)`                                            | vitest (jsdom)           | Pure `src/lib` functions; `<PayloadInput>` behavior                                                      |
-| Scannability · finders | `tests/scannability/finder-shapes.test.ts`                           | vitest (node)            | Shaped finder/alignment patterns scan within margin of square, under stress, on all 4 in-process engines |
-| Scannability · matrix  | `tests/scannability/combinations.test.ts`                            | vitest (node)            | Every module×finder×overlay combination (clean, quorum) + high-risk combos under the full battery        |
-| Real-platform (gated)  | `tests/scannability/python-decoders.test.ts`, `apple-vision.test.ts` | vitest (node) + external | OpenCV/WeChat/Apple-Vision read our codes                                                                |
-| End-to-end             | `tests/e2e/generate-and-download.spec.ts`                            | Playwright (3 browsers)  | UI behavior; real PNG/SVG download → decode (clean + field-stress); cross-browser canvas parity          |
+| Layer                         | Location                                                             | Runner                    | What it guards                                                                                                           |
+| ----------------------------- | -------------------------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Unit & component              | `tests/unit/*.test.ts(x)`                                            | vitest (jsdom)            | Pure `src/lib` functions; `<PayloadInput>` behavior; overlay-budget geometry invariant                                   |
+| Scannability · finders        | `tests/scannability/finder-shapes.test.ts`                           | vitest (node)             | Shaped finder/alignment patterns scan within margin of square, under stress, on all 4 in-process engines                 |
+| Scannability · matrix         | `tests/scannability/combinations.test.ts`                            | vitest (node)             | Every module×finder×overlay (none/icon/text/both) combination (clean, quorum) + high-risk combos under the full battery  |
+| Scannability · overlay budget | `tests/scannability/overlay-budget.test.ts`                          | vitest (node)             | The v1+overlay cliff stays fixed; floor-version overlay is field-safe; the area ceiling sits below the real decode cliff |
+| Real-platform (gated)         | `tests/scannability/python-decoders.test.ts`, `apple-vision.test.ts` | vitest (node) + external  | OpenCV/WeChat/Apple-Vision read our codes (192-combo matrix incl. text/both overlays)                                    |
+| End-to-end                    | `tests/e2e/generate-and-download.spec.ts`                            | Playwright (3 browsers)   | UI behavior; real PNG/SVG download → decode (clean + field-stress); cross-browser canvas parity                          |
+| End-to-end · canvas×Vision    | `tests/e2e/canvas-vision.spec.ts`                                    | Playwright (macOS, gated) | The **real `<canvas>` PNG** export decodes on **Apple Vision** (chromium + Apple-WebKit); self-skips off-macOS           |
 
 **Why scannability runs in the vitest `node` environment:** it uses `sharp`
 (libvips) for rasterization/degradation and wasm decoders, which need Node, not
@@ -86,6 +92,15 @@ The native layers communicate via a temp-dir **manifest** (`{path, expect}[]`):
 the test renders PNGs + writes the manifest, the external tool decodes the batch
 and prints JSON, the test parses and asserts.
 
+**Apple Vision runs in two places.** The gated vitest layer
+(`apple-vision.test.ts`) feeds it the **sharp-rasterized** matrix; the macOS
+`canvas-vision` Playwright job (`canvas-vision.spec.ts`) feeds it the **real
+browser-`<canvas>`** PNG export. The second is the only place the actual
+download pipeline (`svgToPng`) meets a real native decoder — the closest proxy
+to "does an iPhone read the file the user downloaded" short of a device. There,
+Playwright's `webkit` is Apple WebKit (CoreGraphics), a better Safari/iOS canvas
+proxy than the Linux-WebKit used in the cross-browser E2E matrix.
+
 ---
 
 ## 5. The field-degradation battery
@@ -103,6 +118,13 @@ Two implementation notes a fresh agent must respect:
 - **`perspective` is a true projective warp** (an 8-point homography solved in
   `stress.ts`), not the affine `shear`. It models real off-axis foreshortening.
 
+`stress.ts` also exports **`STANDARD_BATTERY`** — one moderate-to-hard level per
+family — the single battery shared by the combinatorial field guard
+(`combinations.test.ts`) and the live CI metrics (`report-metrics.mts`), so the
+published robustness numbers can't drift from what the suite enforces. (The
+`finder-shapes`, `overlay-budget`, and E2E layers keep their own leaner,
+purpose-specific batteries.)
+
 ---
 
 ## 6. Guards & thresholds (single source of truth)
@@ -111,18 +133,39 @@ Two implementation notes a fresh agent must respect:
 are imported by the tests _and_ the report generator, so the report can never
 disagree with what the suite enforces.
 
-| Guard                               | Constant             | Value            | Enforced in         |
-| ----------------------------------- | -------------------- | ---------------- | ------------------- |
-| Shaped finders vs square baseline   | `finderShapeMargin`  | within 10%       | `finder-shapes`     |
-| Combinatorial clean decode          | `cleanQuorum`        | ≥ 3 of 4 engines | `combinations`      |
-| High-risk combos vs square baseline | `combosMargin`       | within 20%       | `combinations`      |
-| Absolute robustness floor           | `robustnessFloor`    | ≥ 40%            | `combinations`, e2e |
-| Canvas PNG vs canonical SVG parity  | `pngSvgParityMargin` | within 15%       | e2e                 |
+| Guard                               | Constant             | Value            | Enforced in             |
+| ----------------------------------- | -------------------- | ---------------- | ----------------------- |
+| Shaped finders vs square baseline   | `finderShapeMargin`  | within 10%       | `finder-shapes`         |
+| Combinatorial clean decode          | `cleanQuorum`        | ≥ 3 of 4 engines | `combinations`          |
+| High-risk combos vs square baseline | `combosMargin`       | within 20%       | `combinations`          |
+| Absolute robustness floor           | `robustnessFloor`    | ≥ 40%            | `combinations`, e2e     |
+| Canvas PNG vs canonical SVG parity  | `pngSvgParityMargin` | within 15%       | e2e                     |
+| Center-overlay plate area           | `overlayAreaCeiling` | ≤ 12% of symbol  | `overlay-budget` (unit) |
 
 **Why a quorum, not unanimity:** each engine has one documented blind spot on
 extreme shape stacks (see §11), but never the _same_ combo — so 3-of-4 proves a
 combination is broadly scannable while still failing a combo that breaks two+
 engines.
+
+**Center-overlay budget + the `MIN_OVERLAY_VERSION` policy (read before touching
+overlays).** A center icon/text paints an _opaque backing plate_ over the
+central modules — that plate's area is a direct draw on the error-correction
+budget, and the plate size depends only on `hasIcon` + text length, never the
+glyph (so `heart` is representative; we don't multiply the matrix across icons).
+At **version 1** the codeword count is so small that, for some payload/mask
+combinations, the occluded codewords are unrecoverable even at level H — e.g.
+`"hello"` + an icon decoded on **zero** of four engines, while the same payload
+with no overlay read fine. Fix: **`generateQr(payload, { minVersion })`** floors
+the version, and `src/App.tsx` passes **`MIN_OVERLAY_VERSION` (= 3)** whenever
+`styleHasOverlay(style)` (giving EC headroom + finder clearance for any
+content). Two guards lock this in: the **unit** half
+(`tests/unit/overlay-budget.test.ts`) is a pure geometric invariant (plate area
+≤ `overlayAreaCeiling`, plate clear of the finders, swept over every renderable
+version) and would fail if someone enlarges the icon/pad constants or drops the
+min version back toward v1; the **scannability** half
+(`tests/scannability/overlay-budget.test.ts`) proves the cliff is real, the
+policy fixes it, the floor version is field-safe, and the area ceiling sits
+below the measured ~25–30% decode cliff.
 
 **If you change a threshold or add/remove tests, you must run `npm run report`
 and commit the regenerated `docs/TEST-REPORT.md`** (CI fails otherwise — §8).
@@ -191,16 +234,25 @@ One consolidated workflow: **`.github/workflows/ci.yml`** (the old separate
 workflow; cross-workflow gating can't express the `needs:` dependency).
 
 ```
-        ┌─ check        (format, lint, typecheck, unit+scannability, report:check)  ┐
-        ├─ e2e          (matrix: chromium / firefox / webkit)                       │
-push/PR ┼─ decoders     (OpenCV + WeChat, ubuntu + .venv)                           ├─► deploy
-        ├─ apple-vision (Apple Vision, macos-latest)                                │   needs: ALL
-        └─ build        (vite build → Pages artifact)                               ┘   main only
+        ┌─ check         (format, lint, typecheck, unit+scannability, report:check) ┐
+        ├─ e2e           (matrix: chromium / firefox / webkit)                       │
+        ├─ decoders      (OpenCV + WeChat, ubuntu + .venv)                           │
+push/PR ┼─ apple-vision  (Apple Vision on sharp PNGs, macos-latest)                  ├─► deploy
+        ├─ canvas-vision (real <canvas> PNG → Apple Vision, macos-latest)            │   needs: ALL
+        └─ build         (vite build → Pages artifact)                              ┘   main only
 ```
 
-- **Deploy is gated:** the `deploy` job `needs: [check, e2e, decoders, apple-vision, build]`
-  and only runs on `main` (push/dispatch), never PRs. A failing test job (or any
-  browser matrix leg) blocks the deploy.
+- **Deploy is gated:** the `deploy` job
+  `needs: [check, e2e, decoders, apple-vision, canvas-vision, build]` and only
+  runs on `main` (push/dispatch), never PRs. A failing test job (or any browser
+  matrix leg) blocks the deploy. **Note: two of the gating legs are
+  `macos-latest`** (`apple-vision`, `canvas-vision`), which can queue longer —
+  see §12.
+- **`canvas-vision`** installs Playwright chromium + webkit on macOS and runs
+  only `canvas-vision.spec.ts` (`npm run test:e2e:canvas-vision`). The spec is
+  also picked up (and self-skipped, no Swift) by the Linux `e2e` matrix legs via
+  the `grep: /PNG/` filter, so `playwright --list` counts it under all three
+  browser projects even though it executes only on the macOS job.
 - **Parallelism:** five jobs fan out; within them vitest multi-threads and
   Playwright uses `workers: '50%'` on CI.
 - **Cross-browser:** Chromium runs the full E2E suite; Firefox/WebKit run only
@@ -218,9 +270,10 @@ push/PR ┼─ decoders     (OpenCV + WeChat, ubuntu + .venv)                   
 npm run check              # format:check + lint + typecheck + test (the gate)
 npm run test               # vitest: unit + component + scannability
 npm run test:e2e           # Playwright (builds + previews; all 3 browser projects)
+npm run test:e2e:canvas-vision  # real canvas PNG → Apple Vision (macOS; chromium + webkit)
 npm run setup:decoders:py  # one-time Python venv for OpenCV/WeChat
 npm run test:decoders:py   # OpenCV/WeChat layer only
-npm run test:vision:apple  # Apple Vision layer only (macOS)
+npm run test:vision:apple  # Apple Vision layer only (macOS; sharp-rasterized matrix)
 npm run report             # regenerate docs/TEST-REPORT.md
 npm run report:check       # freshness guard
 npm run report:metrics     # live robustness numbers (CI summary)
@@ -237,63 +290,79 @@ npm run report:metrics     # live robustness numbers (CI summary)
 Established and encoded into the suite's policy (illustrative numbers from recent
 runs; exact figures vary slightly by platform):
 
+The combinatorial matrix is now **192 combos** (6 modules × 4 finders × 4
+overlay states `none/icon/text/both` × 2 payloads):
+
 | Engine           | Characterized behavior                                                  |
 | ---------------- | ----------------------------------------------------------------------- |
 | jsQR             | Mis-reads `dot` modules under `chamfer` finders                         |
 | ZXing-JS / -wasm | Robust across every shipping combination                                |
 | ZBar             | Tougher on `circle` finders behind a center icon; weaker on dense codes |
-| OpenCV (classic) | **Reads square finders only** — rejects every shaped finder (~26/96)    |
-| WeChat           | Reads ~93/96; only a few dense + heavily-shaped combos slip             |
-| Apple Vision     | **Reads 96/96** — the most capable engine in the suite                  |
+| OpenCV (classic) | **Reads square finders only** — rejects every shaped finder (~50/192)   |
+| WeChat           | Reads ~187/192; only a few dense + heavily-shaped combos slip           |
+| Apple Vision     | **Reads 192/192** — the most capable engine in the suite                |
 
 Field robustness (decode rate over the battery × engines): square baseline ≈
-65%; worst shipping combo (rounded+circle+icon) ≈ 50–54%. Canvas-PNG vs SVG
-parity holds across browsers (e.g. Chromium 68/68%, Firefox/WebKit differ by a
-few points — proof the rasterizers genuinely differ).
+67%; worst shipping combo (rounded+circle+icon, and rounded+circle+icon+text) ≈
+54%; center-text alone costs ~nothing over the icon. Canvas-PNG vs SVG parity
+holds across browsers (e.g. Chromium 68/68%, Firefox/WebKit differ by a few
+points — proof the rasterizers genuinely differ).
+
+**v1 + overlay was a real bug, now fixed.** Before the `MIN_OVERLAY_VERSION`
+policy (§6), a center overlay on a content-unlucky version-1 code (e.g.
+`"hello"` + icon) was unscannable on _every_ engine — the matrix never caught it
+because its payloads all land at v4+. Flooring overlay codes to v3 resolved it;
+`overlay-budget` guards against regression.
 
 ---
 
 ## 12. Outstanding issues & deferred work
 
+**Recently resolved (this round — on branch `more-testing`, pushed):**
+
+- ✅ **Center text was invisible to the multi-engine/native/field layers.** Added
+  the `none/icon/text/both` overlay axis to `matrix.ts`, so text + the icon+text
+  stack are now exercised across the clean quorum, the field battery, and all
+  three native engines (matrix grew 96 → 192 combos).
+- ✅ **Real canvas PNG × native decoder** (was the highest-value gap) — closed by
+  the macOS `canvas-vision` job: the genuine `<canvas>` export is decoded by
+  Apple Vision. See §3/§4/§9.
+- ✅ **Overlay error-correction budget is now property-tested** — and doing so
+  surfaced + fixed a real bug: v1 + overlay could be unscannable (§6, §11). Two
+  new guards (`overlay-budget`, unit + scannability) + the `MIN_OVERLAY_VERSION`
+  policy.
+- ✅ **Field battery deduped** — one `STANDARD_BATTERY` shared by the guard and
+  the live metrics (§5).
+- ✅ **Single representative icon justified** — documented why the overlay plate
+  is glyph-independent, so `heart` alone suffices (§6).
+
 **Open gaps (surfaced, not yet addressed):**
 
-1. **Real canvas PNG × native decoder is untested.** The native decoders
-   (Vision/OpenCV/WeChat) decode **sharp-rasterized** PNGs (`matrix.ts`), while
-   the real **browser-canvas** PNG is only decoded by the 4 JS engines (E2E).
-   So "does an iPhone read the actual _downloaded_ PNG?" is inferred, not
-   measured. Closing it needs a combined macOS job: Playwright produces the
-   canvas PNG → Apple Vision decodes it. _(Highest-value remaining item.)_
-2. **Real Safari canvas isn't in CI** — only Playwright's Linux-WebKit proxy
-   (the `safaridriver`-on-macOS option was declined).
-3. **No in-app guidance for the OpenCV-classic limitation** — shaped finders are
+1. **Real _Safari_ canvas still isn't in CI.** The `canvas-vision` job uses
+   Playwright's macOS `webkit` (Apple WebKit / CoreGraphics) — much closer than
+   the Linux-WebKit proxy, but still not real `safaridriver`/Safari (that option
+   was declined). Vision-on-real-Safari-canvas remains inferred.
+2. **No in-app guidance for the OpenCV-classic limitation** — shaped finders are
    unreadable by bare `cv2.QRCodeDetector`. Characterized/accepted; a user
    picking a circle finder gets no warning. Possible UX item, not a test item.
-4. **Center-icon error-correction budget boundary isn't property-tested** — we
-   only test the app's fixed icon size, not the worst-case size limit.
 
 **Risks / open decisions:**
 
-5. **WebKit-on-Linux is the flakiest target and gates deploy** — mitigated by
-   `retries: 2`; if it churns, the lever is to make that leg non-blocking.
-6. **The macOS Apple Vision job gates deploy** — macOS runners can queue longer.
-   One-line lever: drop `apple-vision` from `deploy.needs` to make it
-   non-blocking while still reporting.
+3. **Two `macos-latest` legs now gate deploy** (`apple-vision` + `canvas-vision`)
+   alongside the WebKit-on-Linux `e2e` leg (flakiest target, mitigated by
+   `retries: 2`). macOS runners can queue longer, so deploy latency/availability
+   risk went up. One-line levers if they churn: drop a leg from `deploy.needs`
+   (report but don't block). _Worth a deliberate decision before an urgent
+   deploy hits the queue._
+4. **Branch-protection required checks** aren't set — recommended to require the
+   CI jobs for PR merges (complements the deploy gate). Repo setting; can't be
+   done from code.
 
 **Deferred by choice:**
 
-7. **Android ML Kit** via emulator (real Google decoder) — highest-effort native
+5. **Android ML Kit** via emulator (real Google decoder) — highest-effort native
    layer; not started.
-8. **Tier-3 physical-device capture rig** — out of CI scope (manual/periodic).
-
-**Immediate action items (as of this handoff):**
-
-9. **None of the testing work is committed yet** (baseline commit `3bdcbb4`).
-   Until committed and pushed: `report:check` is inert (untracked file) and the
-   CI workflow won't run. _Commit + push `ci.yml`, `docs/TEST-REPORT.md`, and the
-   rest first._
-10. **Branch-protection required checks** aren't set — recommended to require the
-    CI jobs for PR merges (complements the deploy gate). Repo setting; can't be
-    done from code.
+6. **Tier-3 physical-device capture rig** — out of CI scope (manual/periodic).
 
 ---
 
@@ -305,7 +374,14 @@ few points — proof the rasterizers genuinely differ).
 - **Changing a guard threshold or adding/removing tests** → update only
   `tests/scannability/guards.ts` if it's a threshold, then `npm run report` and
   commit `docs/TEST-REPORT.md`.
-- **New degradation transforms** must be deterministic (seed any randomness).
+- **New degradation transforms** must be deterministic (seed any randomness). If
+  it's a general-purpose level, consider adding it to `STANDARD_BATTERY` (§5) so
+  the guard and the live metrics move together.
+- **Changing center overlays** (bigger icon, new overlay kind, different sizing):
+  re-check the overlay-budget guards (§6) — the geometric invariant caps the
+  plate area / finder clearance, and overlays must still floor to
+  `MIN_OVERLAY_VERSION`. The plate is glyph-independent, so add the new _kind_ to
+  the `OVERLAYS` axis in `matrix.ts`, not a new icon.
 - **New decoders**: add in-process JS/wasm engines to `DECODERS` (async
   signature); native engines follow the manifest pattern + a gated test that
   self-skips without its toolchain.
@@ -322,17 +398,20 @@ few points — proof the rasterizers genuinely differ).
 ```
 tests/
   unit/                              # pure-function + component tests (jsdom)
+    overlay-budget.test.ts           # overlay-plate geometric invariant (area ≤ ceiling, finder clearance)
   scannability/
     guards.ts                        # GUARDS thresholds (single source) + pct()
     decoders.ts                      # the 4 in-process engines (async DECODERS)
-    stress.ts                        # FAMILIES degradation battery (seeded noise, homography)
-    matrix.ts                        # shared module×finder×overlay×payload renderer
+    stress.ts                        # FAMILIES battery + shared STANDARD_BATTERY (seeded noise, homography)
+    matrix.ts                        # shared module×finder×overlay(none/icon/text/both)×payload renderer
     finder-shapes.test.ts            # shaped-finder field guard
     combinations.test.ts             # combinatorial clean + field-battery guard
+    overlay-budget.test.ts           # overlay decode cliff: v1 bug fixed, floor-version field-safe, ceiling < cliff
     python-decoders.test.ts          # OpenCV + WeChat (gated on .venv)
-    apple-vision.test.ts             # Apple Vision (gated on macOS + swift)
+    apple-vision.test.ts             # Apple Vision on sharp PNGs (gated on macOS + swift)
   e2e/
     generate-and-download.spec.ts    # UI + real PNG/SVG decode + field-stress + cross-browser
+    canvas-vision.spec.ts            # real <canvas> PNG → Apple Vision (gated macOS; chromium + webkit)
 
 tools/
   decoders/decode_qr.py              # OpenCV + WeChat batch decoder
