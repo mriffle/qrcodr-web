@@ -30,8 +30,11 @@ function appleVisionAvailable(): boolean {
   return spawnSync('swift', ['--version'], { encoding: 'utf-8' }).status === 0;
 }
 
+// Skip dynamically (in the test bodies), NOT via `describe.skip`: a static skip
+// is invisible to `vitest list`, which would drop this file's count to 0 on a
+// non-macOS machine and break the report freshness check. Plain `describe` +
+// runtime `ctx.skip()` keeps the count stable while still not running off-Mac.
 const AVAILABLE = appleVisionAvailable();
-const describeMaybe = AVAILABLE ? describe : describe.skip;
 
 if (!AVAILABLE) {
   // eslint-disable-next-line no-console
@@ -40,11 +43,12 @@ if (!AVAILABLE) {
 
 type VisionRow = { path: string; expect: string; vision: string | null };
 
-describeMaybe('real-platform decoder — Apple Vision', () => {
+describe('real-platform decoder — Apple Vision', () => {
   let combos: Combo[] = [];
   const byPath = new Map<string, VisionRow>();
 
   beforeAll(async () => {
+    if (!AVAILABLE) return;
     const dir = mkdtempSync(join(tmpdir(), 'qrcodr-vision-'));
     combos = await renderMatrixToDir(dir);
 
@@ -65,13 +69,15 @@ describeMaybe('real-platform decoder — Apple Vision', () => {
 
   const decoded = (c: Combo): boolean => byPath.get(c.path)?.vision === c.expect;
 
-  it('Vision decodes every combination at a typical (short) payload', () => {
+  it('Vision decodes every combination at a typical (short) payload', (ctx) => {
+    if (!AVAILABLE) return ctx.skip();
     const short = combos.filter((c) => c.payloadKind === 'short');
     const failed = short.filter((c) => !decoded(c)).map((c) => c.label);
     expect(failed, `Vision failed short-payload combos: ${failed.join(', ')}`).toEqual([]);
   });
 
-  it('Vision decodes (nearly) every combination at a dense (long) payload', () => {
+  it('Vision decodes (nearly) every combination at a dense (long) payload', (ctx) => {
+    if (!AVAILABLE) return ctx.skip();
     const long = combos.filter((c) => c.payloadKind === 'long');
     const passed = long.filter(decoded).length;
     const rate = passed / long.length;

@@ -42,8 +42,12 @@ function pythonDecodersAvailable(): boolean {
   return probe.status === 0;
 }
 
+// Skip dynamically (inside the test bodies), NOT via `describe.skip`. A static
+// skip is invisible to `vitest list`, which would make this file's test count
+// drift to 0 on a machine without the venv and break the report freshness check
+// (`docs/TEST-REPORT.md` must enumerate the same everywhere). Plain `describe` +
+// runtime `ctx.skip()` keeps the count stable while still not running without cv2.
 const AVAILABLE = pythonDecodersAvailable();
-const describeMaybe = AVAILABLE ? describe : describe.skip;
 
 if (!AVAILABLE) {
   // eslint-disable-next-line no-console
@@ -59,12 +63,13 @@ type DecodeRow = {
   wechat: string | null;
 };
 
-describeMaybe('real-platform decoders — OpenCV + WeChat', () => {
+describe('real-platform decoders — OpenCV + WeChat', () => {
   let combos: Combo[] = [];
   let rows: DecodeRow[] = [];
   const byPath = new Map<string, DecodeRow>();
 
   beforeAll(async () => {
+    if (!AVAILABLE) return;
     const dir = mkdtempSync(join(tmpdir(), 'qrcodr-py-'));
     combos = await renderMatrixToDir(dir);
 
@@ -91,13 +96,15 @@ describeMaybe('real-platform decoders — OpenCV + WeChat', () => {
     return !!r && r[engine] === c.expect;
   };
 
-  it('WeChat decodes every combination at a typical (short) payload', () => {
+  it('WeChat decodes every combination at a typical (short) payload', (ctx) => {
+    if (!AVAILABLE) return ctx.skip();
     const short = combos.filter((c) => c.payloadKind === 'short');
     const failed = short.filter((c) => !ok(c, 'wechat')).map((c) => c.label);
     expect(failed, `WeChat failed short-payload combos: ${failed.join(', ')}`).toEqual([]);
   });
 
-  it('WeChat decodes the overwhelming majority at a dense (long) payload', () => {
+  it('WeChat decodes the overwhelming majority at a dense (long) payload', (ctx) => {
+    if (!AVAILABLE) return ctx.skip();
     const long = combos.filter((c) => c.payloadKind === 'long');
     const passed = long.filter((c) => ok(c, 'wechat')).length;
     const rate = passed / long.length;
@@ -108,7 +115,8 @@ describeMaybe('real-platform decoders — OpenCV + WeChat', () => {
     );
   });
 
-  it('classic OpenCV detector reads all square-finder combinations', () => {
+  it('classic OpenCV detector reads all square-finder combinations', (ctx) => {
+    if (!AVAILABLE) return ctx.skip();
     const squareFinder = combos.filter((c) => c.finderShape === 'square');
     const failed = squareFinder.filter((c) => !ok(c, 'qrcode_detector')).map((c) => c.label);
     expect(
@@ -117,7 +125,8 @@ describeMaybe('real-platform decoders — OpenCV + WeChat', () => {
     ).toEqual([]);
   });
 
-  it('every combination is read by at least one OpenCV-family engine at short payload', () => {
+  it('every combination is read by at least one OpenCV-family engine at short payload', (ctx) => {
+    if (!AVAILABLE) return ctx.skip();
     const short = combos.filter((c) => c.payloadKind === 'short');
     const failed = short
       .filter((c) => !ok(c, 'wechat') && !ok(c, 'qrcode_detector'))
