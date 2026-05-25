@@ -1,8 +1,20 @@
 /**
- * Two independent QR decoders, run over the same rasterized image so a
- * shape's scannability can be judged against more than one detector. jsQR
- * and ZXing use different finder-pattern detection heuristics, which is
- * exactly the axis we're stressing here.
+ * Independent QR decoders, run over the same rasterized image so a shape's
+ * scannability is judged against more than one detector. Each engine uses
+ * different finder/alignment-pattern heuristics, which is exactly the axis
+ * we stress here:
+ *
+ *  - jsQR            — pure-JS, the reference web scanner.
+ *  - ZXing (JS)      — the JS port of ZXing, TRY_HARDER on.
+ *  - ZXing (wasm)    — zxing-cpp compiled to wasm; this is the C++ engine that
+ *                      a large share of native/mobile apps actually embed
+ *                      (not the JS port), so it's a closer proxy for real
+ *                      scanners than ZXing-JS.
+ *  - ZBar (wasm)     — the ubiquitous embedded/Linux scanner, a genuinely
+ *                      different detector lineage from the ZXing family.
+ *
+ * All decoders share one async signature so the harness can `await` them
+ * uniformly; the two wasm engines lazy-load their module on first call.
  */
 import jsQR from 'jsqr';
 import {
@@ -12,17 +24,27 @@ import {
   QRCodeReader,
   RGBLuminanceSource,
 } from '@zxing/library';
+import { readBarcodes } from 'zxing-wasm/reader';
+import { scanImageData } from '@undecaf/zbar-wasm';
 
 export type DecodeOutcome = { ok: true; text: string } | { ok: false };
 
 /** Decode RGBA pixel data with jsQR. */
-export function decodeJsQr(rgba: Uint8ClampedArray, width: number, height: number): DecodeOutcome {
+export function decodeJsQr(
+  rgba: Uint8ClampedArray,
+  width: number,
+  height: number,
+): Promise<DecodeOutcome> {
   const result = jsQR(rgba, width, height, { inversionAttempts: 'dontInvert' });
-  return result ? { ok: true, text: result.data } : { ok: false };
+  return Promise.resolve(result ? { ok: true, text: result.data } : { ok: false });
 }
 
-/** Decode RGBA pixel data with ZXing's QRCodeReader (TRY_HARDER on). */
-export function decodeZxing(rgba: Uint8ClampedArray, width: number, height: number): DecodeOutcome {
+/** Decode RGBA pixel data with the ZXing JS port (TRY_HARDER on). */
+export function decodeZxingJs(
+  rgba: Uint8ClampedArray,
+  width: number,
+  height: number,
+): Promise<DecodeOutcome> {
   // RGBLuminanceSource only accepts packed-Int32 pixels or a ready grayscale
   // buffer (length === width*height) — NOT raw RGBA bytes. Convert ourselves
   // using the same green-favouring luminance ZXing uses internally.
@@ -40,15 +62,55 @@ export function decodeZxing(rgba: Uint8ClampedArray, width: number, height: numb
   hints.set(DecodeHintType.TRY_HARDER, true);
   try {
     const result = reader.decode(bitmap, hints);
-    return { ok: true, text: result.getText() };
+    return Promise.resolve({ ok: true, text: result.getText() });
+  } catch {
+    return Promise.resolve({ ok: false });
+  }
+}
+
+/** Decode RGBA pixel data with zxing-cpp (wasm). */
+export async function decodeZxingWasm(
+  rgba: Uint8ClampedArray,
+  width: number,
+  height: number,
+): Promise<DecodeOutcome> {
+  try {
+    const results = await readBarcodes(
+      { data: rgba, width, height },
+      { formats: ['QRCode'], tryHarder: true, tryRotate: true, tryInvert: true },
+    );
+    const hit = results.find((r) => r.text.length > 0);
+    return hit ? { ok: true, text: hit.text } : { ok: false };
   } catch {
     return { ok: false };
   }
 }
 
-export const DECODERS = [
+/** Decode RGBA pixel data with ZBar (wasm). */
+export async function decodeZbar(
+  rgba: Uint8ClampedArray,
+  width: number,
+  height: number,
+): Promise<DecodeOutcome> {
+  try {
+    const symbols = await scanImageData({ data: rgba, width, height });
+    const hit = symbols.find((s) => s.decode().length > 0);
+    return hit ? { ok: true, text: hit.decode() } : { ok: false };
+  } catch {
+    return { ok: false };
+  }
+}
+
+export type Decoder = {
+  name: string;
+  fn: (rgba: Uint8ClampedArray, width: number, height: number) => Promise<DecodeOutcome>;
+};
+
+export const DECODERS: readonly Decoder[] = [
   { name: 'jsQR', fn: decodeJsQr },
-  { name: 'ZXing', fn: decodeZxing },
+  { name: 'ZXing-JS', fn: decodeZxingJs },
+  { name: 'ZXing-wasm', fn: decodeZxingWasm },
+  { name: 'ZBar', fn: decodeZbar },
 ] as const;
 
 export type DecoderName = (typeof DECODERS)[number]['name'];

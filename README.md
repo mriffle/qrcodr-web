@@ -1,5 +1,7 @@
 # qrcodr-web
 
+[![Test](https://github.com/mriffle/qrcodr-web/actions/workflows/test.yml/badge.svg)](https://github.com/mriffle/qrcodr-web/actions/workflows/test.yml)
+
 A browser-based QR code generator with a cyberpunk operative-terminal aesthetic. Fully client-side — no backend, no uploads, no tracking. Your payload never leaves the browser.
 
 ## 🚀 Try it now
@@ -52,6 +54,25 @@ npm run preview        # serve the build
 npm run check          # format + lint + typecheck + tests
 npm run test:e2e       # Playwright (builds + previews automatically)
 ```
+
+## Testing & scannability
+
+Scannability is treated as a first-class, tested property — these codes are
+verified to **decode**, not just to render. Beyond unit and component tests, the
+suite stresses the real exported PNG/SVG artifacts under simulated field
+conditions (blur, glare, rotation, perspective, occlusion, JPEG recompression,
+sensor noise) and decodes them with **seven independent engines** — jsQR,
+ZXing-JS, ZXing-wasm, ZBar, OpenCV's classic detector, WeChat's CNN-based
+detector (an offline proxy for the dominant mobile scanner), and **Apple's
+Vision framework** — the actual detector iOS Camera uses, run on a macOS CI
+runner. The PNG-export path is also validated across **Chromium, Firefox, and
+WebKit**, since each browser rasterizes the SVG to canvas differently.
+
+**→ See the full [Test Report](docs/TEST-REPORT.md)** for the test inventory,
+decoder panel, degradation battery, and the enforced field-reliability
+thresholds. It's generated from the suite (`npm run report`) and CI fails if it
+drifts out of date; live per-run robustness numbers are posted to each
+[CI run summary](https://github.com/mriffle/qrcodr-web/actions/workflows/test.yml).
 
 ## Aesthetic
 
