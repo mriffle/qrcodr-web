@@ -1,6 +1,6 @@
 # qrcodr-web
 
-[![Test](https://github.com/mriffle/qrcodr-web/actions/workflows/test.yml/badge.svg)](https://github.com/mriffle/qrcodr-web/actions/workflows/test.yml)
+[![CI](https://github.com/mriffle/qrcodr-web/actions/workflows/ci.yml/badge.svg)](https://github.com/mriffle/qrcodr-web/actions/workflows/ci.yml)
 
 A browser-based QR code generator with a cyberpunk operative-terminal aesthetic. Fully client-side — no backend, no uploads, no tracking. Your payload never leaves the browser.
 
@@ -72,7 +72,7 @@ WebKit**, since each browser rasterizes the SVG to canvas differently.
 decoder panel, degradation battery, and the enforced field-reliability
 thresholds. It's generated from the suite (`npm run report`) and CI fails if it
 drifts out of date; live per-run robustness numbers are posted to each
-[CI run summary](https://github.com/mriffle/qrcodr-web/actions/workflows/test.yml).
+[CI run summary](https://github.com/mriffle/qrcodr-web/actions/workflows/ci.yml).
 
 ## Aesthetic
 
