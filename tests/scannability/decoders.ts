@@ -16,16 +16,20 @@
  * All decoders share one async signature so the harness can `await` them
  * uniformly; the two wasm engines lazy-load their module on first call.
  */
+import { createRequire } from 'node:module';
 import jsQR from 'jsqr';
-import {
-  BinaryBitmap,
-  DecodeHintType,
-  HybridBinarizer,
-  QRCodeReader,
-  RGBLuminanceSource,
-} from '@zxing/library';
 import { readBarcodes } from 'zxing-wasm/reader';
 import { scanImageData } from '@undecaf/zbar-wasm';
+
+// @zxing/library ships a CommonJS build with no `exports` map, so a native ESM
+// loader (Playwright's, and CI's Node 20) resolves it to the CJS entry and its
+// module lexer can't see the named exports — `import { BinaryBitmap } from
+// '@zxing/library'` throws "does not provide an export named 'BinaryBitmap'".
+// (It only worked locally because Vite/vitest use the package's `module`/ESM
+// build.) Loading it via `createRequire` sidesteps ESM named-export resolution
+// entirely and works identically under Vite, Node, and Playwright.
+const { BinaryBitmap, DecodeHintType, HybridBinarizer, QRCodeReader, RGBLuminanceSource } =
+  createRequire(import.meta.url)('@zxing/library') as typeof import('@zxing/library');
 
 export type DecodeOutcome = { ok: true; text: string } | { ok: false };
 
