@@ -12,15 +12,16 @@ and apps actually use.
 
 ## Test inventory
 
-| Layer                                     | Suite                   |   Tests |
-| ----------------------------------------- | ----------------------- | ------: |
-| Unit & component                          | `tests/unit`            |     141 |
-| Scannability · finder/alignment shapes    | `finder-shapes`         |       2 |
-| Scannability · combinatorial matrix       | `combinations`          |      49 |
-| Real-platform OpenCV/WeChat (gated)       | `python-decoders`       |       4 |
-| Real-platform Apple Vision (macOS, gated) | `apple-vision`          |       2 |
-| End-to-end · Playwright (3 browsers)      | `generate-and-download` |     251 |
-| **Total**                                 |                         | **449** |
+| Layer                                     | Suite                                     |   Tests |
+| ----------------------------------------- | ----------------------------------------- | ------: |
+| Unit & component                          | `tests/unit`                              |     144 |
+| Scannability · finder/alignment shapes    | `finder-shapes`                           |       2 |
+| Scannability · combinatorial matrix       | `combinations`                            |      97 |
+| Scannability · center-overlay budget      | `overlay-budget`                          |       3 |
+| Real-platform OpenCV/WeChat (gated)       | `python-decoders`                         |       4 |
+| Real-platform Apple Vision (macOS, gated) | `apple-vision`                            |       2 |
+| End-to-end · Playwright (3 browsers)      | `generate-and-download` · `canvas-vision` |     254 |
+| **Total**                                 |                                           | **506** |
 
 Counts are collected with `vitest list` / `playwright --list` (tests are
 enumerated, not executed), so they are identical on every machine. The E2E count
@@ -46,6 +47,12 @@ The native layers are **gated** — OpenCV/WeChat self-skips unless the
 project-local `.venv` is present (`npm run setup:decoders:py`), and Apple
 Vision self-skips unless run on macOS with a Swift toolchain (a dedicated
 `macos-latest` CI job).
+
+Apple Vision additionally decodes the **real browser-`<canvas>` PNG exports**
+(not just sharp-rasterized SVGs) in a dedicated macOS Playwright job
+(`canvas-vision`), where Playwright's WebKit is Apple WebKit — the closest
+proxy to "does an iPhone read the file the user actually downloads" short of a
+physical device.
 
 ## Field-degradation battery
 
@@ -77,6 +84,7 @@ field-reliability thresholds:
 | High-risk combos vs square baseline | within 20%       | `combinations`      |
 | Absolute robustness floor           | ≥ 40%            | `combinations`, e2e |
 | Canvas PNG vs canonical SVG parity  | within 15%       | e2e                 |
+| Center-overlay plate area           | ≤ 12% of symbol  | `overlay-budget`    |
 
 ## Characterized cross-engine behavior
 

@@ -123,10 +123,11 @@ function build(): string {
   const unit = sumWhere(vc, (f) => f.startsWith('tests/unit/'));
   const finder = vc.get('tests/scannability/finder-shapes.test.ts') ?? 0;
   const combos = vc.get('tests/scannability/combinations.test.ts') ?? 0;
+  const overlay = vc.get('tests/scannability/overlay-budget.test.ts') ?? 0;
   const python = vc.get('tests/scannability/python-decoders.test.ts') ?? 0;
   const vision = vc.get('tests/scannability/apple-vision.test.ts') ?? 0;
   const e2e = playwrightCount();
-  const total = unit + finder + combos + python + vision + e2e;
+  const total = unit + finder + combos + overlay + python + vision + e2e;
 
   const inventory = table(
     ['Layer', 'Suite', 'Tests'],
@@ -135,9 +136,14 @@ function build(): string {
       ['Unit & component', '`tests/unit`', String(unit)],
       ['Scannability · finder/alignment shapes', '`finder-shapes`', String(finder)],
       ['Scannability · combinatorial matrix', '`combinations`', String(combos)],
+      ['Scannability · center-overlay budget', '`overlay-budget`', String(overlay)],
       ['Real-platform OpenCV/WeChat (gated)', '`python-decoders`', String(python)],
       ['Real-platform Apple Vision (macOS, gated)', '`apple-vision`', String(vision)],
-      ['End-to-end · Playwright (3 browsers)', '`generate-and-download`', String(e2e)],
+      [
+        'End-to-end · Playwright (3 browsers)',
+        '`generate-and-download` · `canvas-vision`',
+        String(e2e),
+      ],
       ['**Total**', '', `**${String(total)}**`],
     ],
   );
@@ -187,6 +193,11 @@ function build(): string {
       ],
       ['Absolute robustness floor', `≥ ${pct(GUARDS.robustnessFloor)}`, '`combinations`, e2e'],
       ['Canvas PNG vs canonical SVG parity', `within ${pct(GUARDS.pngSvgParityMargin)}`, 'e2e'],
+      [
+        'Center-overlay plate area',
+        `≤ ${pct(GUARDS.overlayAreaCeiling)} of symbol`,
+        '`overlay-budget`',
+      ],
     ],
   );
 
@@ -235,6 +246,12 @@ The native layers are **gated** — OpenCV/WeChat self-skips unless the
 project-local \`.venv\` is present (\`npm run setup:decoders:py\`), and Apple
 Vision self-skips unless run on macOS with a Swift toolchain (a dedicated
 \`macos-latest\` CI job).
+
+Apple Vision additionally decodes the **real browser-\`<canvas>\` PNG exports**
+(not just sharp-rasterized SVGs) in a dedicated macOS Playwright job
+(\`canvas-vision\`), where Playwright's WebKit is Apple WebKit — the closest
+proxy to "does an iPhone read the file the user actually downloads" short of a
+physical device.
 
 ## Field-degradation battery
 

@@ -94,6 +94,30 @@ jobs:
       - run: npm ci
       - run: npm run test:vision:apple
 
+  canvas-vision:
+    name: Canvas PNG × Apple Vision (macOS)
+    # macOS runner: Playwright's `webkit` here is Apple WebKit (the closest iOS
+    # Safari canvas proxy), and Vision.framework + Swift ship with Xcode. This is
+    # the only job where the REAL browser-canvas PNG export meets the REAL iOS
+    # detector — every other layer hands Vision a sharp-rasterized SVG instead.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/ms-playwright
+          key: playwright-${{ runner.os }}-chromium-webkit-${{ hashFiles('package-lock.json') }}
+      - run: npx playwright install --with-deps chromium webkit
+      # The Playwright webServer builds + previews the app; the spec downloads the
+      # genuine canvas PNGs and decodes them with the Apple Vision tool.
+      - run: npm run test:e2e:canvas-vision
+
   build:
     name: Build Pages artifact
     runs-on: ubuntu-latest
@@ -130,7 +154,7 @@ jobs:
   # ── Gated deploy (fan-in) ─────────────────────────────────────────────────
   deploy:
     name: Deploy to GitHub Pages
-    needs: [check, e2e, decoders, apple-vision, build]
+    needs: [check, e2e, decoders, apple-vision, canvas-vision, build]
     # Only deploy from main (push or manual dispatch) — never from a PR.
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest

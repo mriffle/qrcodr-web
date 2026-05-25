@@ -396,3 +396,26 @@ export const FAMILIES: Family[] = [
     direction: 'higherHarder',
   },
 ];
+
+/**
+ * The standard robustness battery: one moderate-to-hard level from every
+ * degradation family, chosen to discriminate a healthy code from a regressing
+ * one (extreme levels fail everything and carry no signal). Shared by the
+ * combinatorial field guard (`combinations.test.ts`) and the live CI metrics
+ * (`report-metrics.mts`) so the published numbers can never drift from the
+ * battery the suite actually enforces.
+ */
+export const STANDARD_BATTERY: ((master: Buffer) => Promise<Rgba>)[] = [
+  (m) => shrink(m, 110),
+  (m) => shrink(m, 72),
+  (m) => blur(m, 2),
+  (m) => blur(m, 3.5),
+  (m) => lowContrast(m, 0.27),
+  (m) => shear(m, 0.4),
+  (m) => rotate(m, 20),
+  (m) => jpeg(m, 25),
+  (m) => glare(m, 0.85),
+  (m) => noise(m, 30),
+  (m) => occlusion(m, 0.18),
+  (m) => perspective(m, 0.12),
+];

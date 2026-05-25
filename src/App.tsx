@@ -8,7 +8,9 @@ import { validatePayload } from './lib/payload';
 import {
   DEFAULT_STYLE,
   generateQr,
+  MIN_OVERLAY_VERSION,
   sanitizeCenterText,
+  styleHasOverlay,
   type QrResult,
   type QrStyle,
 } from './lib/qr';
@@ -39,14 +41,21 @@ export function App() {
 
   const validation = useMemo(() => validatePayload(rawPayload), [rawPayload]);
 
+  // Overlays occlude central codewords; floor the version so a sub-min code
+  // can't be rendered unscannable (see MIN_OVERLAY_VERSION). Depend on the
+  // boolean, not `style`, so colour changes don't regenerate the matrix.
+  const hasOverlay = styleHasOverlay(style);
   const qr: QrResult | null = useMemo(() => {
     if (!validation.ok) return null;
     try {
-      return generateQr(validation.value);
+      return generateQr(
+        validation.value,
+        hasOverlay ? { minVersion: MIN_OVERLAY_VERSION } : undefined,
+      );
     } catch {
       return null;
     }
-  }, [validation]);
+  }, [validation, hasOverlay]);
 
   const error = validation.ok ? null : validation.error;
 

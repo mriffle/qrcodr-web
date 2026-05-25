@@ -6,11 +6,12 @@
  * Unlike the E2E suite (which decodes one clean render), this renders the
  * PRODUCTION `qrToSvgString` for each finder shape, then stresses it the way a
  * real scan does — shrink, blur, low contrast, off-axis shear — and decodes
- * with two independent engines (jsQR + ZXing). It asserts every shipped shape
- * scans within a small margin of the square baseline.
+ * with all four in-process engines (jsQR, ZXing-JS, ZXing-wasm, ZBar). It
+ * asserts every shipped shape scans within a small margin of the square
+ * baseline.
  *
  * This is the test that would have caught `dots` (which decodes fine clean but
- * regresses badly in the field). `decoders.ts` and `stress.ts` (the two-engine
+ * regresses badly in the field). `decoders.ts` and `stress.ts` (the multi-engine
  * decode + field-degradation harness) live alongside this file.
  * Runs in the `node` environment (sharp + decoders need it, not jsdom).
  */

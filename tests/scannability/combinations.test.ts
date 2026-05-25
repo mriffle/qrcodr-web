@@ -12,8 +12,11 @@
  * Two layers, mirroring the rest of the suite:
  *   1. Every shipping combination decodes CLEAN on a quorum (≥3 of 4) of the
  *      engines (jsQR, ZXing-JS, ZXing-wasm, ZBar), exhaustively over the
- *      cartesian product. Quorum, not unanimity, because each engine has a
- *      documented blind spot on extreme shape stacks (see CLEAN_QUORUM).
+ *      cartesian product — including every center-overlay state (none / icon /
+ *      text / both), since a center label draws on the error-correction budget
+ *      just like an icon and stacking the two is the worst case. Quorum, not
+ *      unanimity, because each engine has a documented blind spot on extreme
+ *      shape stacks (see CLEAN_QUORUM).
  *   2. A curated set of high-risk combinations survives the full field
  *      battery (the four classic degradations PLUS rotate / jpeg / glare /
  *      noise / occlusion / perspective) within a margin of the plain-square
@@ -25,43 +28,19 @@
 import { describe, it, expect } from 'vitest';
 import sharp from 'sharp';
 import { validatePayload } from '../../src/lib/payload';
-import { generateQr, qrToSvgString, DEFAULT_STYLE, type QrStyle } from '../../src/lib/qr';
-import { findCenterIcon } from '../../src/lib/center-icons';
-import { DECODERS } from './decoders';
 import {
-  shrink,
-  blur,
-  lowContrast,
-  shear,
-  rotate,
-  jpeg,
-  glare,
-  noise,
-  occlusion,
-  perspective,
-} from './stress';
-import type { Rgba } from './stress';
+  generateQr,
+  qrToSvgString,
+  styleHasOverlay,
+  MIN_OVERLAY_VERSION,
+  type QrStyle,
+} from '../../src/lib/qr';
+import { DECODERS } from './decoders';
+import { STANDARD_BATTERY, type Rgba } from './stress';
+import { MODULE_SHAPES, FINDER_SHAPES, OVERLAYS, styleFor } from './matrix';
 import { GUARDS } from './guards';
 
 const BG = { r: 240, g: 237, b: 226, alpha: 1 };
-
-const MODULE_SHAPES = [
-  'square',
-  'rounded',
-  'chamfer',
-  'dot',
-  'horizontal-pill',
-  'vertical-pill',
-] as const satisfies readonly QrStyle['moduleShape'][];
-const FINDER_SHAPES = [
-  'square',
-  'rounded',
-  'chamfer',
-  'circle',
-] as const satisfies readonly QrStyle['finderShape'][];
-
-const HEART = findCenterIcon('heart');
-const ICON = { id: 'heart', innerSvg: HEART.innerSvg } as const;
 
 // Short (no alignment patterns) + long (alignment patterns) so the matrix
 // exercises both locator regimes.
@@ -69,23 +48,13 @@ const CLEAN_PAYLOAD = 'https://example.com/path?q=value';
 const STRESS_PAYLOAD =
   'https://www.anthropic.com/research/very/long/path/with-many/segments?foo=bar';
 
-function styleFor(
-  moduleShape: QrStyle['moduleShape'],
-  finderShape: QrStyle['finderShape'],
-  withIcon: boolean,
-): QrStyle {
-  return {
-    ...DEFAULT_STYLE,
-    moduleShape,
-    finderShape,
-    ...(withIcon ? { centerIcon: ICON } : {}),
-  };
-}
-
 function renderMaster(payload: string, style: QrStyle, px = 1024): Promise<Buffer> {
   const v = validatePayload(payload);
   if (!v.ok) throw new Error(`invalid test payload: ${payload}`);
-  const qr = generateQr(v.value);
+  const qr = generateQr(
+    v.value,
+    styleHasOverlay(style) ? { minVersion: MIN_OVERLAY_VERSION } : undefined,
+  );
   const svg = qrToSvgString(qr, style);
   return sharp(Buffer.from(svg), { density: 600 })
     .resize(px, px, { fit: 'contain', background: BG })
@@ -105,30 +74,12 @@ async function rgbaOf(master: Buffer): Promise<Rgba> {
   };
 }
 
-// A field battery spanning every degradation family, at moderate-to-hard
-// levels chosen to discriminate a healthy combo from a regressing one
-// (extreme levels fail everything and carry no signal).
-const BATTERY: ((m: Buffer) => Promise<Rgba>)[] = [
-  (m) => shrink(m, 110),
-  (m) => shrink(m, 72),
-  (m) => blur(m, 2),
-  (m) => blur(m, 3.5),
-  (m) => lowContrast(m, 0.27),
-  (m) => shear(m, 0.4),
-  (m) => rotate(m, 20),
-  (m) => jpeg(m, 25),
-  (m) => glare(m, 0.85),
-  (m) => noise(m, 30),
-  (m) => occlusion(m, 0.18),
-  (m) => perspective(m, 0.12),
-];
-
 /** Fraction of (battery level × decoder) trials that decoded `payload`. */
 async function robustness(style: QrStyle, payload: string): Promise<number> {
   const master = await renderMaster(payload, style);
   let ok = 0;
   let total = 0;
-  for (const apply of BATTERY) {
+  for (const apply of STANDARD_BATTERY) {
     const img = await apply(master);
     for (const decoder of DECODERS) {
       total++;
@@ -150,14 +101,11 @@ const CLEAN_QUORUM = GUARDS.cleanQuorum;
 describe('combinatorial scannability — clean decode', () => {
   for (const moduleShape of MODULE_SHAPES) {
     for (const finderShape of FINDER_SHAPES) {
-      for (const withIcon of [false, true] as const) {
-        const label = `${moduleShape}/${finderShape}/${withIcon ? 'icon' : 'plain'}`;
+      for (const overlay of OVERLAYS) {
+        const label = `${moduleShape}/${finderShape}/${overlay}`;
         it(`${label} decodes clean on ≥${CLEAN_QUORUM}/${DECODERS.length} engines (both payloads)`, async () => {
           for (const payload of [CLEAN_PAYLOAD, STRESS_PAYLOAD]) {
-            const master = await renderMaster(
-              payload,
-              styleFor(moduleShape, finderShape, withIcon),
-            );
+            const master = await renderMaster(payload, styleFor(moduleShape, finderShape, overlay));
             const img = await rgbaOf(master);
             const failed: string[] = [];
             for (const decoder of DECODERS) {
@@ -180,12 +128,18 @@ describe('combinatorial scannability — field battery', () => {
   // High-risk combinations: each stacks shaped modules, shaped finders, and/or
   // a center overlay so the test exercises their interaction under stress.
   const RISKY: { name: string; style: QrStyle }[] = [
-    { name: 'dot · circle · icon', style: styleFor('dot', 'circle', true) },
-    { name: 'dot · square · icon', style: styleFor('dot', 'square', true) },
-    { name: 'h-pill · rounded · plain', style: styleFor('horizontal-pill', 'rounded', false) },
-    { name: 'v-pill · chamfer · plain', style: styleFor('vertical-pill', 'chamfer', false) },
-    { name: 'rounded · circle · icon', style: styleFor('rounded', 'circle', true) },
-    { name: 'chamfer · chamfer · icon', style: styleFor('chamfer', 'chamfer', true) },
+    { name: 'dot · circle · icon', style: styleFor('dot', 'circle', 'icon') },
+    { name: 'dot · square · icon', style: styleFor('dot', 'square', 'icon') },
+    { name: 'h-pill · rounded · plain', style: styleFor('horizontal-pill', 'rounded', 'none') },
+    { name: 'v-pill · chamfer · plain', style: styleFor('vertical-pill', 'chamfer', 'none') },
+    { name: 'rounded · circle · icon', style: styleFor('rounded', 'circle', 'icon') },
+    { name: 'chamfer · chamfer · icon', style: styleFor('chamfer', 'chamfer', 'icon') },
+    // Center text and the icon+text stack — the heaviest draw on the
+    // error-correction budget — over the worst module/finder backdrops. This is
+    // the field-battery coverage center text previously lacked (it was decoded
+    // only clean, by jsQR, in E2E).
+    { name: 'dot · square · text', style: styleFor('dot', 'square', 'text') },
+    { name: 'rounded · circle · both', style: styleFor('rounded', 'circle', 'both') },
   ];
 
   // Margin below the plain-square baseline a shipping combination may sit, and

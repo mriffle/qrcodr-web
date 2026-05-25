@@ -17,6 +17,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "test:e2e:canvas-vision": "playwright test tests/e2e/canvas-vision.spec.ts --project=chromium --project=webkit",
     "setup:decoders:py": "bash scripts/setup-python-decoders.sh",
     "test:decoders:py": "vitest run tests/scannability/python-decoders.test.ts",
     "test:vision:apple": "vitest run tests/scannability/apple-vision.test.ts",
