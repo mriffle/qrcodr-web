@@ -10,7 +10,14 @@
 import sharp from 'sharp';
 import { join } from 'node:path';
 import { validatePayload } from '../../src/lib/payload';
-import { generateQr, qrToSvgString, DEFAULT_STYLE, type QrStyle } from '../../src/lib/qr';
+import {
+  generateQr,
+  qrToSvgString,
+  styleHasOverlay,
+  MIN_OVERLAY_VERSION,
+  DEFAULT_STYLE,
+  type QrStyle,
+} from '../../src/lib/qr';
 import { findCenterIcon } from '../../src/lib/center-icons';
 
 export const MODULE_SHAPES = [
@@ -37,13 +44,28 @@ export type PayloadKind = keyof typeof PAYLOADS;
 
 const HEART = findCenterIcon('heart');
 const ICON = { id: 'heart', innerSvg: HEART.innerSvg } as const;
+/**
+ * Representative center label. Short by design: the layout auto-fits the font
+ * to the overlay box, so the text length changes the glyph size, not the
+ * occluded (error-correction-consuming) area.
+ */
+const OVERLAY_TEXT = 'OPS';
 const BG = { r: 240, g: 237, b: 226, alpha: 1 };
 const PX = 700;
+
+/**
+ * The center-overlay states the product ships: nothing, an icon, a text label,
+ * or both stacked (the heaviest draw on the error-correction budget). Varied
+ * across the full module × finder grid because the overlay sits over the centre
+ * data region and central alignment pattern, where shape stress compounds.
+ */
+export type Overlay = 'none' | 'icon' | 'text' | 'both';
+export const OVERLAYS = ['none', 'icon', 'text', 'both'] as const satisfies readonly Overlay[];
 
 export type Combo = {
   moduleShape: QrStyle['moduleShape'];
   finderShape: QrStyle['finderShape'];
-  withIcon: boolean;
+  overlay: Overlay;
   payloadKind: PayloadKind;
   expect: string;
   path: string;
@@ -53,13 +75,14 @@ export type Combo = {
 export function styleFor(
   moduleShape: QrStyle['moduleShape'],
   finderShape: QrStyle['finderShape'],
-  withIcon: boolean,
+  overlay: Overlay,
 ): QrStyle {
   return {
     ...DEFAULT_STYLE,
     moduleShape,
     finderShape,
-    ...(withIcon ? { centerIcon: ICON } : {}),
+    centerIcon: overlay === 'icon' || overlay === 'both' ? ICON : null,
+    centerText: overlay === 'text' || overlay === 'both' ? OVERLAY_TEXT : null,
   };
 }
 
@@ -73,16 +96,16 @@ export async function renderMatrixToDir(dir: string): Promise<Combo[]> {
   let i = 0;
   for (const moduleShape of MODULE_SHAPES) {
     for (const finderShape of FINDER_SHAPES) {
-      for (const withIcon of [false, true] as const) {
+      for (const overlay of OVERLAYS) {
         for (const payloadKind of ['short', 'long'] as const) {
           combos.push({
             moduleShape,
             finderShape,
-            withIcon,
+            overlay,
             payloadKind,
             expect: PAYLOADS[payloadKind],
             path: join(dir, `c${String(i++)}.png`),
-            label: `${moduleShape}/${finderShape}/${withIcon ? 'icon' : 'plain'}/${payloadKind}`,
+            label: `${moduleShape}/${finderShape}/${overlay}/${payloadKind}`,
           });
         }
       }
@@ -92,10 +115,12 @@ export async function renderMatrixToDir(dir: string): Promise<Combo[]> {
     combos.map(async (c) => {
       const v = validatePayload(c.expect);
       if (!v.ok) throw new Error(`invalid payload: ${c.expect}`);
-      const svg = qrToSvgString(
-        generateQr(v.value),
-        styleFor(c.moduleShape, c.finderShape, c.withIcon),
+      const style = styleFor(c.moduleShape, c.finderShape, c.overlay);
+      const qr = generateQr(
+        v.value,
+        styleHasOverlay(style) ? { minVersion: MIN_OVERLAY_VERSION } : undefined,
       );
+      const svg = qrToSvgString(qr, style);
       await sharp(Buffer.from(svg), { density: 600 })
         .resize(PX, PX, { fit: 'contain', background: BG })
         .png()

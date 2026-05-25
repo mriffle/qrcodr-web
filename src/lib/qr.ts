@@ -153,12 +153,47 @@ export function sanitizeCenterText(raw: string): string {
 }
 
 /**
- * Generate a QR matrix from a validated payload. Uses error-correction
- * level H (~30% redundancy) to leave headroom for the v2 center-icon
- * overlay without breaking scannability.
+ * Minimum QR version to generate when a center overlay is present.
+ *
+ * A center icon/text paints an opaque plate over the *central* modules. At
+ * version 1 (21×21) the codeword count is so small that, for some payload/mask
+ * combinations, those occluded codewords are unrecoverable even at level H —
+ * e.g. `"hello"` + an icon decodes on **zero** of the four engines, while the
+ * same payload with no overlay reads fine. Empirically every payload at v2+
+ * survives any overlay clean and under mild blur; v3 additionally clears the
+ * finder/format ring by ~1.6 modules (v1 overlaps it, v2 only grazes it) and
+ * leaves field-stress margin. So whenever an overlay is requested we generate
+ * at no less than this version. Guarded by `tests/scannability/overlay-budget`
+ * (the cliff is real) and `tests/unit/overlay-budget` (the geometry is safe).
  */
-export function generateQr(payload: ValidatedPayload): QrResult {
-  const qr = QRCode.create(payload, { errorCorrectionLevel: 'H' });
+export const MIN_OVERLAY_VERSION = 3;
+
+/** True when a style carries a center overlay that occludes central modules. */
+export function styleHasOverlay(style: QrStyle): boolean {
+  return (
+    (style.centerIcon !== null && style.centerIcon.innerSvg.length > 0) ||
+    (style.centerText !== null && style.centerText.length > 0)
+  );
+}
+
+/**
+ * Generate a QR matrix from a validated payload. Uses error-correction
+ * level H (~30% redundancy) to leave headroom for the center-icon/text overlay
+ * without breaking scannability.
+ *
+ * `options.minVersion` floors the chosen version (the natural fit is used when
+ * it is already larger). Pass {@link MIN_OVERLAY_VERSION} when the style has an
+ * overlay — see that constant for why a sub-min version + overlay can be
+ * unscannable. Omitted ⇒ the library picks the smallest fitting version.
+ */
+export function generateQr(payload: ValidatedPayload, options?: { minVersion?: number }): QrResult {
+  const natural = QRCode.create(payload, { errorCorrectionLevel: 'H' });
+  const min = options?.minVersion ?? 1;
+  // Re-create at the floor only when needed; min > natural always fits.
+  const qr =
+    natural.version >= min
+      ? natural
+      : QRCode.create(payload, { errorCorrectionLevel: 'H', version: min });
   return {
     matrix: qr.modules.data,
     size: qr.modules.size,

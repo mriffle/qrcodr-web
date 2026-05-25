@@ -22,6 +22,15 @@ export const GUARDS = {
   robustnessFloor: 0.4,
   /** E2E: the canvas PNG must scan within this of the canonical SVG. */
   pngSvgParityMargin: 0.15,
+  /**
+   * overlay-budget: max fraction of the symbol area the center-overlay backing
+   * plate may occupy. The plate knocks out the modules under it, so this is a
+   * direct error-correction-budget cap. The app's worst case (icon+text at
+   * MIN_OVERLAY_VERSION) sits at ~9.3%; this 12% ceiling catches a regression
+   * that enlarges the overlay while staying well below the measured ~25–30%
+   * decode cliff (both bounds asserted in `overlay-budget`).
+   */
+  overlayAreaCeiling: 0.12,
 } as const;
 
 /** Render a 0..1 fraction as a whole-percent string (e.g. 0.1 → "10%"). */
