@@ -2,6 +2,10 @@ import { test, expect, type Download, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import jsQR from 'jsqr';
 import sharp from 'sharp';
+import { DECODERS } from '../scannability/decoders';
+import { shrink, blur, shear, jpeg, glare, occlusion, perspective } from '../scannability/stress';
+import type { Rgba } from '../scannability/stress';
+import { GUARDS } from '../scannability/guards';
 
 /** Decode a QR code from a PNG buffer. Throws if no QR is found. */
 async function decodePng(buffer: Buffer): Promise<string> {
@@ -542,5 +546,133 @@ test.describe('qrcodr-web · module shape + center overlay decode', () => {
         expect(decoded).toBe(fixture.value);
       });
     }
+  }
+});
+
+// ── Real export artifacts under field stress (PNG + SVG) ────────────────────
+// The decode tests above prove the downloaded artifacts read in PERFECT
+// conditions. These take the SAME real artifacts and run them through the
+// field-degradation battery, decoding with all four engines (jsQR, ZXing-JS,
+// ZXing-wasm, ZBar). This is the only place the actual browser-canvas
+// rasterization path (`svgToPng` in src/lib/download.ts) is stressed: the Node
+// scannability suite can only rasterize the canonical SVG with sharp, so it
+// would miss a canvas-specific antialiasing/scaling regression that leaves the
+// PNG scannable when clean but fragile in the field. Both formats are covered:
+// the PNG is the literal downloaded canvas output; the SVG is the downloaded
+// canonical artifact, rasterized here exactly as the clean SVG tests do.
+const STRESS_PAYLOAD =
+  'https://www.anthropic.com/research/very/long/path/with-many/segments?foo=bar';
+
+const STRESS_BG = { r: 240, g: 237, b: 226, alpha: 1 };
+
+// A lean cross-family battery (geometry + photometric + compression). Kept
+// small so it doesn't dominate E2E wall time — the exhaustive battery and the
+// relative-to-baseline comparison live in the Node scannability suite; here we
+// only need to catch an export pipeline that emits field-fragile codes.
+const E2E_BATTERY: { name: string; apply: (m: Buffer) => Promise<Rgba> }[] = [
+  { name: 'shrink-96', apply: (m) => shrink(m, 96) },
+  { name: 'blur-2.5', apply: (m) => blur(m, 2.5) },
+  { name: 'shear-0.4', apply: (m) => shear(m, 0.4) },
+  { name: 'jpeg-30', apply: (m) => jpeg(m, 30) },
+  { name: 'glare-0.85', apply: (m) => glare(m, 0.85) },
+  { name: 'occlusion-0.18', apply: (m) => occlusion(m, 0.18) },
+  { name: 'perspective-0.12', apply: (m) => perspective(m, 0.12) },
+];
+
+// Absolute robustness floor over (battery × 4 engines): catches an export that
+// collapses outright. Set below the hardest shipping composition (rounded +
+// circle finder + icon measures ~50% on this battery — the Node suite owns the
+// relative-to-baseline characterization; here we only guard against collapse).
+const STRESS_FLOOR = GUARDS.robustnessFloor;
+
+// The load-bearing assertion of this layer: the canvas-rasterized PNG must scan
+// about as well as the canonical SVG under identical stress. A gap beyond this
+// means the `<canvas>` path (antialiasing/scaling) introduced field fragility
+// the SVG doesn't have — exactly the regression a Node-only test can't see.
+const PNG_SVG_PARITY_MARGIN = GUARDS.pngSvgParityMargin;
+
+/** Rasterize a downloaded SVG to a high-res master PNG for the battery. */
+function svgToMasterPng(svg: Buffer): Promise<Buffer> {
+  return sharp(svg, { density: 600 })
+    .resize(1024, 1024, { fit: 'contain', background: STRESS_BG })
+    .png()
+    .toBuffer();
+}
+
+/** Run the battery over a master PNG and return the decode success rate. */
+async function stressRobustness(master: Buffer, expected: string): Promise<number> {
+  let ok = 0;
+  let total = 0;
+  for (const { apply } of E2E_BATTERY) {
+    const img = await apply(master);
+    for (const decoder of DECODERS) {
+      total++;
+      const r = await decoder.fn(img.rgba, img.width, img.height);
+      if (r.ok && r.text === expected) ok++;
+    }
+  }
+  return ok / total;
+}
+
+type StressStyle = { name: string; apply: (page: Page) => Promise<void> };
+const STRESS_STYLES: StressStyle[] = [
+  { name: 'default square', apply: () => Promise.resolve() },
+  {
+    name: 'rounded + circle finder + heart icon',
+    apply: async (page) => {
+      await selectShape(page, 'module-shape-rounded');
+      await selectFinderShape(page, 'finder-shape-circle');
+      await page.getByTestId('center-icon-trigger').click();
+      await page.getByTestId('center-icon-option-heart').click();
+    },
+  },
+];
+
+/** Download one export format for the current page state and return its bytes. */
+async function downloadExport(page: Page, format: 'png' | 'svg'): Promise<Buffer> {
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByTestId(`export-${format}`).click(),
+  ]);
+  expect(download.suggestedFilename()).toMatch(new RegExp(`\\.${format}$`));
+  return readDownload(download);
+}
+
+test.describe('qrcodr-web · real export artifacts under field stress', () => {
+  for (const style of STRESS_STYLES) {
+    test(`PNG + SVG exports (${style.name}) survive the field battery`, async ({ page }) => {
+      test.slow(); // two downloads + battery × 4 engines + wasm init exceed the default budget
+      await page.goto('/');
+      await page.getByTestId('payload-input').fill(STRESS_PAYLOAD);
+      await style.apply(page);
+
+      // The literal canvas-rasterized PNG the user downloads, and the canonical
+      // SVG rasterized exactly as the clean SVG tests do.
+      const pngMaster = await downloadExport(page, 'png');
+      const svgMaster = await svgToMasterPng(await downloadExport(page, 'svg'));
+
+      const pngScore = await stressRobustness(pngMaster, STRESS_PAYLOAD);
+      const svgScore = await stressRobustness(svgMaster, STRESS_PAYLOAD);
+      console.log(
+        `[e2e-stress] ${style.name} — PNG ${(pngScore * 100).toFixed(0)}% · SVG ${(svgScore * 100).toFixed(0)}%`,
+      );
+
+      // Neither format may collapse in the field.
+      expect(
+        pngScore,
+        `PNG ${style.name} robustness ${(pngScore * 100).toFixed(0)}%`,
+      ).toBeGreaterThanOrEqual(STRESS_FLOOR);
+      expect(
+        svgScore,
+        `SVG ${style.name} robustness ${(svgScore * 100).toFixed(0)}%`,
+      ).toBeGreaterThanOrEqual(STRESS_FLOOR);
+
+      // The canvas PNG must not scan materially worse than the SVG it's rendered
+      // from — the regression guard the Node suite (sharp-only) can't provide.
+      expect(
+        pngScore,
+        `PNG (${(pngScore * 100).toFixed(0)}%) lags SVG (${(svgScore * 100).toFixed(0)}%) by more than ${PNG_SVG_PARITY_MARGIN * 100}% — canvas rasterization regression?`,
+      ).toBeGreaterThanOrEqual(svgScore - PNG_SVG_PARITY_MARGIN);
+    });
   }
 });

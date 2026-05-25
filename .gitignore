@@ -21,6 +21,9 @@ tmp
 .DS_Store
 Thumbs.db
 
+# python venv for the OpenCV/WeChat decoder layer (tools/decoders)
+.venv
+
 # env / logs
 .env
 .env.local

@@ -1,0 +1,6 @@
+# Real-platform QR decoders for the scannability suite (see decode_qr.py).
+# Installed into ./.venv only — never onto the host interpreter.
+#   python3 -m venv .venv
+#   .venv/bin/python -m pip install -r tools/decoders/requirements.txt
+opencv-contrib-python>=4.9,<5
+numpy

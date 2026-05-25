@@ -18,13 +18,38 @@ npm run lint           # eslint .
 npm run format         # prettier --write .
 npm run format:check   # prettier --check .
 
-npm run test           # vitest run (unit + component, jsdom)
+npm run test           # vitest run (unit + component + scannability)
 npm run test:watch     # vitest in watch mode
 npm run test:e2e       # playwright test (builds + previews automatically)
 npm run test:e2e:ui    # playwright in UI mode
 
+npm run setup:decoders:py  # one-time: build .venv + install OpenCV/WeChat decoders
+npm run test:decoders:py   # run only the OpenCV/WeChat "real platform" layer
+npm run test:vision:apple  # run only the Apple Vision layer (macOS + swift)
+
+npm run report         # regenerate docs/TEST-REPORT.md (committed, README-linked)
+npm run report:check   # regenerate + `git diff --exit-code` (CI staleness guard)
+npm run report:metrics # print this run's live robustness numbers (for CI summary)
+
 npm run check          # format:check + lint + typecheck + test (all in one)
 ```
+
+The **native decoder layers are gated** so `npm run test` runs them where the tooling is present and silently skips them elsewhere:
+
+- **OpenCV/WeChat** (`tests/scannability/python-decoders.test.ts`) — self-skips unless the project-local `.venv` exists and `cv2` imports. Run `npm run setup:decoders:py` once to enable it; the venv lives in `.venv` (gitignored) — never install these packages on the host interpreter.
+- **Apple Vision** (`tests/scannability/apple-vision.test.ts` + `tools/apple-vision/decode_qr.swift`) — self-skips unless on macOS with a `swift` toolchain. `VNDetectBarcodesRequest` is the _actual_ iOS Camera/macOS detector and decodes 100% of our matrix (the most capable engine in the suite). Runs in a dedicated `macos-latest` CI job.
+
+Both file-based layers share the matrix renderer in `tests/scannability/matrix.ts` (render the module×finder×overlay×payload grid to PNGs + a manifest, hand it to the external decoder).
+
+### Test report (`docs/TEST-REPORT.md`) — committed, freshness-guarded
+
+`docs/TEST-REPORT.md` is a **generated** document (linked from the README so it's visible on GitHub) produced by `scripts/generate-test-report.mts`. It is intentionally **deterministic**: it contains only the test inventory (counts from `vitest list` / `playwright --list`, which enumerate without executing), the guard thresholds, the decoder panel, the degradation battery, and stable qualitative findings — **no measured percentages or timestamps**, because those drift macOS↔Linux and would defeat the freshness check. CI (`.github/workflows/ci.yml`) regenerates it and fails on any diff, so it can never silently go stale. The volatile per-run robustness numbers are published to the **GitHub Actions job summary** via `report:metrics`, not committed. Guard thresholds live in one place — `tests/scannability/guards.ts` (`GUARDS`) — imported by both the tests and the report generator, so the report can't disagree with what the suite enforces. **When you change a guard threshold or add/remove tests, run `npm run report` and commit the regenerated doc.**
+
+### CI / deployment (`.github/workflows/ci.yml`)
+
+One consolidated workflow runs these jobs in parallel — `check` (format/lint/typecheck + unit/scannability + `report:check`), `e2e` (a **browser matrix**: chromium/firefox/webkit), `decoders` (the gated OpenCV/WeChat layer), `apple-vision` (the gated Apple Vision layer, on `macos-latest`), and `build` (the Pages artifact) — then a `deploy` job that `needs:` all of them. **Deployment to GitHub Pages is gated on every test job (and every browser leg) passing** and only runs on `main` (push or `workflow_dispatch`), never on PRs. PRs run everything (so `build` also validates the production compile) but skip deploy. Don't reintroduce a standalone deploy workflow — cross-workflow gating can't express the `needs:` dependency. E2E uses `workers: '50%'` on CI (`playwright.config.ts`).
+
+**Cross-browser E2E:** chromium runs the full suite; firefox + webkit run only the canvas/PNG-export subset (config `grep: /PNG/`), because that's the only browser-dependent path (`svgToPng`'s SVG→canvas rasterization differs per engine; the SVG export is a generated string, identical everywhere). The matrix legs run `--project=<browser>`; `fail-fast: false` so all three report. WebKit is Playwright's Linux WebKit — a good engine proxy for Safari, not real CoreGraphics.
 
 Run a single unit test file: `npx vitest run tests/unit/qr.test.ts`
 Run a single E2E test: `npx playwright test -g "decodes back to its payload"`
@@ -38,7 +63,7 @@ The Playwright config (`playwright.config.ts`) starts its own preview server on 
 This is a v1 release deliberately scoped narrow, with hooks for v2 already in place. Honor these or v2 becomes a rewrite:
 
 1. **Never use `qrcode`'s built-in renderers** (`toDataURL`, `toString`, etc.). We use `QRCode.create()` to get the raw matrix only. All rendering is our own, so v2 can add custom module shapes / colors / center icons by editing one function.
-2. **`QrStyle` carries v2 fields with v1 defaults.** `moduleShape` (`square`/`rounded`/`chamfer`/`dot`/`horizontal-pill`/`vertical-pill`) and `centerIcon` are implemented; `canvasShape` is still a declared-but-unimplemented v2 hook (`'square'` only). The rendering pipeline already accepts it; v2 swaps the implementation, not the type. `chamfer` shares `rounded`'s per-corner merge logic (`shouldRoundCorner`) but emits straight 45° cuts (`CHAMFER_DEPTH`) instead of arcs. Pill modes fuse adjacent on-cells along one axis into capsules with a small cross-axis gap (`PILL_GAP`). `finderShape` (`square`/`rounded`/`chamfer`/`circle`) restyles the structural **locator patterns** — the three finder patterns _and_ every alignment pattern (one control, same family) — drawing each as a composite ring + eye via `framePattern`. **Timing patterns always stay square**, and the data path forces a square for any cell `moduleShape` would otherwise round. Only `rounded`/`chamfer`/`circle` ship: they were measured to scan as reliably as square across two decoders under heavy field degradation (guarded by `tests/scannability`); diamond/dots/star regressed and are intentionally absent, and the circle radii are locked (1:1:3:1:1 ratio) — don't retune. When `finderShape` ≠ `square`, the foreground path is emitted with `fill-rule="evenodd"` so the ring gap carves as a hole; this is safe because every module subpath is mutually disjoint, so the `square` output stays byte-for-byte identical.
+2. **`QrStyle` carries v2 fields with v1 defaults.** `moduleShape` (`square`/`rounded`/`chamfer`/`dot`/`horizontal-pill`/`vertical-pill`) and `centerIcon` are implemented; `canvasShape` is still a declared-but-unimplemented v2 hook (`'square'` only). The rendering pipeline already accepts it; v2 swaps the implementation, not the type. `chamfer` shares `rounded`'s per-corner merge logic (`shouldRoundCorner`) but emits straight 45° cuts (`CHAMFER_DEPTH`) instead of arcs. Pill modes fuse adjacent on-cells along one axis into capsules with a small cross-axis gap (`PILL_GAP`). `finderShape` (`square`/`rounded`/`chamfer`/`circle`) restyles the structural **locator patterns** — the three finder patterns _and_ every alignment pattern (one control, same family) — drawing each as a composite ring + eye via `framePattern`. **Timing patterns always stay square**, and the data path forces a square for any cell `moduleShape` would otherwise round. Only `rounded`/`chamfer`/`circle` ship: they were measured to scan within 10% of square across a four-engine panel (jsQR + ZXing-JS + ZXing-wasm + ZBar) under heavy field degradation (guarded by `tests/scannability`); diamond/dots/star regressed and are intentionally absent, and the circle radii are locked (1:1:3:1:1 ratio) — don't retune. (Cross-engine note: ZBar is measurably tougher on circular finders and OpenCV's classic `QRCodeDetector` cannot read any non-square finder at all; both are documented, accepted limitations — WeChat and the JS/wasm engines read them fine.) When `finderShape` ≠ `square`, the foreground path is emitted with `fill-rule="evenodd"` so the ring gap carves as a hole; this is safe because every module subpath is mutually disjoint, so the `square` output stays byte-for-byte identical.
 3. **SVG is the single source of truth.** `qrToSvgString()` produces the canonical artifact. The SVG download writes it verbatim; the PNG download rasterizes it via `<canvas>` (`svgToPng` in `src/lib/download.ts`). Both export formats render identically by construction.
 4. **The Apparatus chrome is in the React component, NOT the exported SVG.** `src/components/QrDrawing.tsx` adds dimension lines, registration marks, and version stamps for the on-screen preview. The downloaded files contain only the bare scannable QR — those decorations would break scanners.
 
@@ -66,8 +91,16 @@ All state lives in `App.tsx` as `useState` + `useMemo`. There's no router, no gl
 
 - **Unit** (`tests/unit/*.test.ts`) — pure functions in `src/lib/*`. Validation rules, matrix invariants (size² length, finder-pattern corners, version monotonicity), SVG structural properties, filename slugging.
 - **Component** (`tests/unit/*.test.tsx`) — React Testing Library + jsdom. Behavior of `<PayloadInput>` (event wiring, error states). Use `getByRole('textbox')` for the input — `getByLabelText(/payload/i)` matches both the section's aria-label and the input's, and will fail.
-- **E2E + QR decode** (`tests/e2e/*.spec.ts`) — Playwright drives the real built app. The decode tests are the load-bearing safety net: each downloads a PNG/SVG, rasterizes via `sharp` (for SVG), and decodes via `jsqr`, asserting the decoded text equals the input. This catches subtle SVG layout regressions that a snapshot test would miss (e.g. a quiet-zone bug that scanners reject but humans can't see).
-- **Scannability** (`tests/scannability/*.test.ts`, vitest `node` environment) — renders the production `qrToSvgString`, then _stresses_ it (shrink/blur/low-contrast/shear) and decodes with **two** engines (jsQR + ZXing), asserting shaped finders scan within a margin of the square baseline. This is the field-reliability guard the clean E2E decode can't be: a clean-only test passes `dots`, which regresses badly in the field. Its decode + degradation harness (`decoders.ts`, `stress.ts`) lives alongside the test. Add the relevant decode here before introducing any new structural-shape option.
+- **E2E + QR decode** (`tests/e2e/*.spec.ts`) — Playwright drives the real built app. The decode tests are the load-bearing safety net: each downloads a PNG/SVG, rasterizes via `sharp` (for SVG), and decodes via `jsqr`, asserting the decoded text equals the input. This catches subtle SVG layout regressions that a snapshot test would miss (e.g. a quiet-zone bug that scanners reject but humans can't see). The final block (`real export artifacts under field stress`) downloads **both** real exports — the literal `<canvas>`-rasterized PNG and the canonical SVG — runs them through a lean field battery (reusing `tests/scannability/{stress,decoders}.ts`) and decodes with all four engines. It asserts neither collapses **and** that the canvas PNG scans within a parity margin of the SVG — the only place the browser canvas rasterization path (`svgToPng`) is stressed, since the Node suite can only sharp-rasterize the SVG.
+- **Scannability** (`tests/scannability/*.test.ts`, vitest `node` environment) — renders the production `qrToSvgString`, then _stresses_ it and decodes with multiple independent engines, asserting field reliability stays within a margin of the square baseline. This is the field-reliability guard the clean E2E decode can't be: a clean-only test passes `dots`, which regresses badly in the field. Layers:
+  - `decoders.ts` — **four in-process engines**: jsQR, ZXing-JS, ZXing-wasm (the C++ engine real native apps embed), and ZBar (a different detector lineage). All async; the wasm engines lazy-load.
+  - `stress.ts` — the field-degradation battery: shrink, blur, low-contrast, affine shear, **rotation, true projective perspective (homography, not just affine), JPEG round-trip, specular glare, deterministic sensor noise, and partial occlusion**. Each takes a master PNG + intensity → decoder-ready RGBA. Noise is seeded (mulberry32) so the guard never flakes.
+  - `finder-shapes.test.ts` — the finder/alignment-shape guard (shaped finders within 10% of square across all four engines).
+  - `combinations.test.ts` — the **combinatorial matrix**: every module × finder × center-overlay combination decodes clean on a ≥3-of-4 engine quorum (quorum, not unanimity, because each engine has a single-combo blind spot), and a curated high-risk subset survives the full battery within a margin of the square baseline.
+  - `python-decoders.test.ts` + `tools/decoders/decode_qr.py` — the **gated "real platform" layer**: OpenCV's classic `QRCodeDetector` and WeChat's CNN detector, run from `.venv` (see Commands). WeChat is the offline proxy for the dominant mobile scanner.
+  - `apple-vision.test.ts` + `tools/apple-vision/decode_qr.swift` — the **gated Apple Vision layer**: `VNDetectBarcodesRequest`, the real iOS Camera detector, run on macOS. Highest-fidelity "does it scan on iPhone" check short of a physical device.
+
+  Add the relevant decode here before introducing any new structural-shape option.
 
 When changing anything in `src/lib/qr.ts` or `src/lib/download.ts`, the E2E decode suite is what tells you whether real scanners will still read it.
 
