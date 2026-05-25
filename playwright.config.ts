@@ -18,6 +18,12 @@ export default defineConfig({
     baseURL: `http://localhost:${PORT}`,
     trace: 'on-first-retry',
     headless: true,
+    // Run against the app's reduced-motion state (which it already supports —
+    // see the `prefers-reduced-motion` blocks in src/styles). This disables the
+    // ambient HUD animations (scanlines, pulse, caret, bloom) so elements settle
+    // and Playwright's "stable" actionability check can't hang — the cause of a
+    // WebKit-on-Linux click-timeout flake on the heaviest preview combo.
+    contextOptions: { reducedMotion: 'reduce' },
   },
   // chromium runs the full suite (the dev default). firefox + webkit run only
   // the canvas-path tests via `grep` — every PNG export test (titled `…PNG…`)
