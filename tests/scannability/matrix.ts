@@ -42,6 +42,15 @@ export const PAYLOADS = {
 } as const;
 export type PayloadKind = keyof typeof PAYLOADS;
 
+// `heart` is the single representative icon across the scannability/native
+// layers, and that is sufficient by construction: `centerOverlayLayout` sizes
+// the opaque backing plate from `hasIcon` + text length only — never the glyph
+// — and the plate is what knocks out modules (the error-correction cost). The
+// glyph is painted in the foreground *inside* that already-occluded plate, so a
+// different icon can't occlude more or change scannability. Testing every glyph
+// would re-measure identical plate geometry with different decorative fills, for
+// no new signal — so we don't. (The plate-area cap is guarded directly in
+// `overlay-budget`.)
 const HEART = findCenterIcon('heart');
 const ICON = { id: 'heart', innerSvg: HEART.innerSvg } as const;
 /**

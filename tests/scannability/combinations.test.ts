@@ -36,19 +36,7 @@ import {
   type QrStyle,
 } from '../../src/lib/qr';
 import { DECODERS } from './decoders';
-import {
-  shrink,
-  blur,
-  lowContrast,
-  shear,
-  rotate,
-  jpeg,
-  glare,
-  noise,
-  occlusion,
-  perspective,
-} from './stress';
-import type { Rgba } from './stress';
+import { STANDARD_BATTERY, type Rgba } from './stress';
 import { MODULE_SHAPES, FINDER_SHAPES, OVERLAYS, styleFor } from './matrix';
 import { GUARDS } from './guards';
 
@@ -86,30 +74,12 @@ async function rgbaOf(master: Buffer): Promise<Rgba> {
   };
 }
 
-// A field battery spanning every degradation family, at moderate-to-hard
-// levels chosen to discriminate a healthy combo from a regressing one
-// (extreme levels fail everything and carry no signal).
-const BATTERY: ((m: Buffer) => Promise<Rgba>)[] = [
-  (m) => shrink(m, 110),
-  (m) => shrink(m, 72),
-  (m) => blur(m, 2),
-  (m) => blur(m, 3.5),
-  (m) => lowContrast(m, 0.27),
-  (m) => shear(m, 0.4),
-  (m) => rotate(m, 20),
-  (m) => jpeg(m, 25),
-  (m) => glare(m, 0.85),
-  (m) => noise(m, 30),
-  (m) => occlusion(m, 0.18),
-  (m) => perspective(m, 0.12),
-];
-
 /** Fraction of (battery level × decoder) trials that decoded `payload`. */
 async function robustness(style: QrStyle, payload: string): Promise<number> {
   const master = await renderMaster(payload, style);
   let ok = 0;
   let total = 0;
-  for (const apply of BATTERY) {
+  for (const apply of STANDARD_BATTERY) {
     const img = await apply(master);
     for (const decoder of DECODERS) {
       total++;

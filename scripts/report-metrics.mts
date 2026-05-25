@@ -17,38 +17,11 @@ import {
   type QrStyle,
 } from '../src/lib/qr.ts';
 import { DECODERS } from '../tests/scannability/decoders.ts';
-import {
-  shrink,
-  blur,
-  lowContrast,
-  shear,
-  rotate,
-  jpeg,
-  glare,
-  noise,
-  occlusion,
-  perspective,
-  type Rgba,
-} from '../tests/scannability/stress.ts';
+import { STANDARD_BATTERY } from '../tests/scannability/stress.ts';
 import { styleFor } from '../tests/scannability/matrix.ts';
 
 const PAYLOAD = 'https://www.anthropic.com/research/very/long/path/with-many/segments?foo=bar';
 const BG = { r: 240, g: 237, b: 226, alpha: 1 };
-
-const BATTERY: ((m: Buffer) => Promise<Rgba>)[] = [
-  (m) => shrink(m, 110),
-  (m) => shrink(m, 72),
-  (m) => blur(m, 2),
-  (m) => blur(m, 3.5),
-  (m) => lowContrast(m, 0.27),
-  (m) => shear(m, 0.4),
-  (m) => rotate(m, 20),
-  (m) => jpeg(m, 25),
-  (m) => glare(m, 0.85),
-  (m) => noise(m, 30),
-  (m) => occlusion(m, 0.18),
-  (m) => perspective(m, 0.12),
-];
 
 async function robustness(style: QrStyle): Promise<number> {
   const v = validatePayload(PAYLOAD);
@@ -65,7 +38,7 @@ async function robustness(style: QrStyle): Promise<number> {
     .toBuffer();
   let ok = 0;
   let total = 0;
-  for (const apply of BATTERY) {
+  for (const apply of STANDARD_BATTERY) {
     const img = await apply(master);
     for (const decoder of DECODERS) {
       total++;
@@ -100,7 +73,7 @@ for (const { name, style } of CONFIGS) {
 }
 lines.push(
   '',
-  `> Decode success over ${String(BATTERY.length)} field degradations × ${String(DECODERS.length)} engines, dense payload. Varies slightly by platform; not committed (see docs/TEST-REPORT.md for the stable report).`,
+  `> Decode success over ${String(STANDARD_BATTERY.length)} field degradations × ${String(DECODERS.length)} engines, dense payload. Varies slightly by platform; not committed (see docs/TEST-REPORT.md for the stable report).`,
 );
 // eslint-disable-next-line no-console
 console.log(lines.join('\n'));
