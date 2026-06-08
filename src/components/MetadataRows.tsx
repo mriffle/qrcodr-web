@@ -130,6 +130,7 @@ const MODULE_SHAPES: { value: QrStyle['moduleShape']; label: string }[] = [
   { value: 'rounded', label: 'Rounded' },
   { value: 'chamfer', label: 'Chamfer' },
   { value: 'dot', label: 'Dot' },
+  { value: 'grid', label: 'Grid' },
   { value: 'horizontal-pill', label: 'Horizontal Pill' },
   { value: 'vertical-pill', label: 'Vertical Pill' },
 ];

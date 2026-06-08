@@ -715,6 +715,7 @@ describe('moduleSwatchPath', () => {
       'rounded',
       'chamfer',
       'dot',
+      'grid',
       'horizontal-pill',
       'vertical-pill',
     ] as const) {
@@ -735,6 +736,12 @@ describe('moduleSwatchPath', () => {
     // pills: capsule caps at the pill radius.
     expect(moduleSwatchPath('horizontal-pill')).toMatch(/a0\.42,0\.42/);
     expect(moduleSwatchPath('vertical-pill')).toMatch(/a0\.42,0\.42/);
+    // grid: a shrunk axis-aligned square (side 1 - 2*0.1 = 0.8), no arcs or cuts.
+    const grid = moduleSwatchPath('grid');
+    expect(grid).toMatch(/h0\.8v0\.8h-0\.8z/);
+    expect(grid).not.toMatch(/[al]/);
+    // and never the full-bleed square — every cell is inset, leaving a gutter.
+    expect(grid).not.toMatch(/h1v1h-1z/);
   });
 
   test('swatches are faithful: no cell is forced square (no reserved fallback)', () => {

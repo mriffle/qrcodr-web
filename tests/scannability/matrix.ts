@@ -25,6 +25,7 @@ export const MODULE_SHAPES = [
   'rounded',
   'chamfer',
   'dot',
+  'grid',
   'horizontal-pill',
   'vertical-pill',
 ] as const satisfies readonly QrStyle['moduleShape'][];

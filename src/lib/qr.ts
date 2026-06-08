@@ -7,10 +7,11 @@ import type { ValidatedPayload } from './payload';
  * data modules render as crisp squares, smooth-blob rounded shapes that
  * merge into pills along runs, chamfered squares with 45° corners cut
  * (same merge logic as rounded, straight cuts instead of arcs), fully
- * separated circular dots that never merge, or capsule "pills" that fuse
- * adjacent on-cells along a single axis (`horizontal-pill` /
- * `vertical-pill`) with a small cross-axis gap; `canvasShape` is a v2
- * hook not yet implemented.
+ * separated circular dots that never merge, separated squares with a thin
+ * gutter on every side (`grid` — square shrunk by `GRID_GAP` per side so
+ * neighbors never touch), or capsule "pills" that fuse adjacent on-cells
+ * along a single axis (`horizontal-pill` / `vertical-pill`) with a small
+ * cross-axis gap; `canvasShape` is a v2 hook not yet implemented.
  * `centerIcon` is an optional decorative overlay painted in the
  * foreground color, sized to stay safely under the H error-correction
  * budget. `centerText` is a short label (≤ CENTER_TEXT_MAX_LENGTH chars
@@ -20,7 +21,14 @@ import type { ValidatedPayload } from './payload';
 export type QrStyle = {
   foreground: string;
   background: string;
-  moduleShape: 'square' | 'rounded' | 'chamfer' | 'dot' | 'horizontal-pill' | 'vertical-pill';
+  moduleShape:
+    | 'square'
+    | 'rounded'
+    | 'chamfer'
+    | 'dot'
+    | 'grid'
+    | 'horizontal-pill'
+    | 'vertical-pill';
   /**
    * Shape of the structural locator patterns — the three finder ("position")
    * patterns AND every alignment pattern (they're the same family, so one
@@ -75,6 +83,20 @@ const CHAMFER_DEPTH = 0.5;
  * round-trip is the guardrail if this is ever pushed larger.
  */
 const PILL_GAP = 0.08;
+
+/**
+ * Per-side inset for `grid` mode, in module units. Each data module renders
+ * as a square shrunk to `1 - 2 * GRID_GAP` and re-centered, leaving a thin
+ * gutter on every side so neighbors never touch (unlike `square`, which
+ * tiles edge-to-edge). At 0.1 the dark fill stays at 80% per cell —
+ * decoders sample module centers, so this reads as a crisp grid while
+ * staying comfortably scannable. Unlike `dot` it keeps the corners, so it
+ * degrades far more gently than a circle. Locator and timing cells are
+ * forced to full squares (see `classify`), so the structurally critical
+ * regions are untouched. Tunable, but guarded by tests/scannability —
+ * pushing past ~0.12 starts eroding the contrast scanners rely on.
+ */
+const GRID_GAP = 0.1;
 
 /**
  * Pill thickness (and dot/cap diameter) in module units. Cap radius is
@@ -361,6 +383,19 @@ function emitSquareSubpath(qx: number, qy: number): string {
 function emitDotSubpath(qx: number, qy: number): string {
   const r = MODULE_RADIUS;
   return `M${String(qx)},${String(qy + r)}a${String(r)},${String(r)} 0 0 1 1,0a${String(r)},${String(r)} 0 0 1 -1,0z`;
+}
+
+/**
+ * Emit a square inset by `GRID_GAP` on every side for one on-module at
+ * (qx, qy) — the `grid` shape. Like {@link emitDotSubpath}, it never merges
+ * with neighbors (no corner test), so a uniform gutter separates every cell.
+ * Single leading `M` keeps the one-subpath-per-cell invariant the count
+ * tests rely on.
+ */
+function emitGridSubpath(qx: number, qy: number): string {
+  const g = GRID_GAP;
+  const side = 1 - 2 * g;
+  return `M${fmt(qx + g)},${fmt(qy + g)}h${fmt(side)}v${fmt(side)}h${fmt(-side)}z`;
 }
 
 /**
@@ -716,6 +751,9 @@ function buildModulePath(
           break;
         case 'dot':
           subpaths.push(emitDotSubpath(qx, qy));
+          break;
+        case 'grid':
+          subpaths.push(emitGridSubpath(qx, qy));
           break;
         case 'square':
           subpaths.push(emitSquareSubpath(qx, qy));

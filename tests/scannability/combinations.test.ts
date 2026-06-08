@@ -134,6 +134,7 @@ describe('combinatorial scannability — field battery', () => {
     { name: 'v-pill · chamfer · plain', style: styleFor('vertical-pill', 'chamfer', 'none') },
     { name: 'rounded · circle · icon', style: styleFor('rounded', 'circle', 'icon') },
     { name: 'chamfer · chamfer · icon', style: styleFor('chamfer', 'chamfer', 'icon') },
+    { name: 'grid · circle · icon', style: styleFor('grid', 'circle', 'icon') },
     // Center text and the icon+text stack — the heaviest draw on the
     // error-correction budget — over the worst module/finder backdrops. This is
     // the field-battery coverage center text previously lacked (it was decoded
