@@ -131,7 +131,12 @@ select {
   color: inherit;
 }
 
-:focus {
+/* Suppress the default ring only for pointer-driven focus. Keyboard focus
+   (:focus-visible) keeps the UA outline as a fallback on any control that
+   doesn't draw its own lime ring — so a new control can never ship with
+   zero focus indication. (Every current control styles its own via
+   :focus-visible or a :focus-within treatment on its container.) */
+:focus:not(:focus-visible) {
   outline: none;
 }
 
