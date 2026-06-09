@@ -201,7 +201,12 @@ function usePickerMenu() {
     if (!open || !triggerRef.current || !menuRef.current) return;
     const trigger = triggerRef.current.getBoundingClientRect();
     const menuHeight = menuRef.current.offsetHeight;
-    const margin = 12;
+    // Must cover the menu's 8px drop offset PLUS the 8px translateY that
+    // hud-rise starts from: transforms count toward scrollable overflow, so a
+    // down-placed menu with less clearance than that transiently pokes past
+    // the document bottom mid-animation and flashes the page scrollbar
+    // (reflowing the whole layout — a visible jiggle).
+    const margin = 20;
     const spaceBelow = window.innerHeight - trigger.bottom - margin;
     const spaceAbove = trigger.top - margin;
     setPlacement(spaceBelow < menuHeight && spaceAbove > spaceBelow ? 'up' : 'down');
