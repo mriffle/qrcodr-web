@@ -23,8 +23,8 @@ function valid(s: string): ValidatedPayload {
 }
 
 describe('CENTER_ICONS catalog', () => {
-  test('contains 21 entries (20 icons + None)', () => {
-    expect(CENTER_ICONS.length).toBe(21);
+  test('contains 22 entries (21 icons + None)', () => {
+    expect(CENTER_ICONS.length).toBe(22);
   });
 
   test('first entry is the no-op None option with empty innerSvg', () => {

@@ -11,6 +11,7 @@ import moonSvg from '../assets/center-icons/moon.svg?raw';
 import mushroomSvg from '../assets/center-icons/mushroom.svg?raw';
 import musicNoteSvg from '../assets/center-icons/music-note.svg?raw';
 import fishSvg from '../assets/center-icons/fish.svg?raw';
+import octopusSvg from '../assets/center-icons/octopus.svg?raw';
 import pawPrintSvg from '../assets/center-icons/paw-print.svg?raw';
 import rocketSvg from '../assets/center-icons/rocket.svg?raw';
 import skullSvg from '../assets/center-icons/skull.svg?raw';
@@ -45,6 +46,7 @@ export type CenterIconId =
   | 'moon'
   | 'mushroom'
   | 'music-note'
+  | 'octopus'
   | 'paw-print'
   | 'rocket'
   | 'skull'
@@ -89,6 +91,7 @@ export const CENTER_ICONS: readonly CenterIconDef[] = [
   { id: 'paw-print', label: 'Paw', innerSvg: extractInner(pawPrintSvg) },
   { id: 'dinosaur', label: 'Dinosaur', innerSvg: extractInner(dinosaurSvg) },
   { id: 'fish', label: 'Fish', innerSvg: extractInner(fishSvg) },
+  { id: 'octopus', label: 'Octopus', innerSvg: extractInner(octopusSvg) },
   { id: 'ghost', label: 'Ghost', innerSvg: extractInner(ghostSvg) },
   { id: 'skull', label: 'Skull', innerSvg: extractInner(skullSvg) },
   { id: 'crown', label: 'Crown', innerSvg: extractInner(crownSvg) },
