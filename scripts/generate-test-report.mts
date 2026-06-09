@@ -290,5 +290,4 @@ printed in the test logs and published to the GitHub Actions run summary.
 
 const markdown = build();
 writeFileSync(OUT, markdown);
-// eslint-disable-next-line no-console
 console.log(`wrote ${OUT.replace(`${ROOT}/`, '')}`);

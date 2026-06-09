@@ -75,5 +75,4 @@ lines.push(
   '',
   `> Decode success over ${String(STANDARD_BATTERY.length)} field degradations × ${String(DECODERS.length)} engines, dense payload. Varies slightly by platform; not committed (see docs/TEST-REPORT.md for the stable report).`,
 );
-// eslint-disable-next-line no-console
 console.log(lines.join('\n'));

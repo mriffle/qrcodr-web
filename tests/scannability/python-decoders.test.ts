@@ -50,7 +50,6 @@ function pythonDecodersAvailable(): boolean {
 const AVAILABLE = pythonDecodersAvailable();
 
 if (!AVAILABLE) {
-  // eslint-disable-next-line no-console
   console.warn(
     '[python-decoders] skipped — run `npm run setup:decoders:py` to enable the OpenCV/WeChat layer.',
   );
@@ -85,7 +84,6 @@ describe('real-platform decoders — OpenCV + WeChat', () => {
     // Surface the cross-engine coverage so a CI log shows the real picture.
     const wechatOk = rows.filter((r) => r.wechat === r.expect).length;
     const classicOk = rows.filter((r) => r.qrcode_detector === r.expect).length;
-    // eslint-disable-next-line no-console
     console.log(
       `[python-decoders] WeChat ${String(wechatOk)}/${String(rows.length)}, classic ${String(classicOk)}/${String(rows.length)}`,
     );

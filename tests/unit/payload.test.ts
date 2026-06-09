@@ -50,6 +50,35 @@ describe('validatePayload', () => {
     const result = validatePayload(padded);
     expect(result.ok).toBe(true);
   });
+
+  test('counts UTF-8 bytes, not UTF-16 code units (2-byte chars)', () => {
+    // 700 chars but 1400 UTF-8 bytes — must be rejected, not passed through
+    // to QRCode.create where it would throw and silently produce no QR.
+    const result = validatePayload('é'.repeat(700));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe('too-long');
+  });
+
+  test('counts UTF-8 bytes, not UTF-16 code units (4-byte emoji)', () => {
+    // 350 emoji = 700 UTF-16 code units but 1400 UTF-8 bytes.
+    const result = validatePayload('🙂'.repeat(350));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe('too-long');
+  });
+
+  test('accepts a multi-byte payload exactly at the byte ceiling', () => {
+    // 636 × "é" (1272 bytes) + "a" (1 byte) = exactly MAX_PAYLOAD_LENGTH.
+    const atMax = 'é'.repeat(636) + 'a';
+    const result = validatePayload(atMax);
+    expect(result.ok).toBe(true);
+  });
+
+  test('rejects a multi-byte payload one byte over the ceiling', () => {
+    // 636 × "é" + "aa" = MAX_PAYLOAD_LENGTH + 1 bytes.
+    const result = validatePayload('é'.repeat(636) + 'aa');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe('too-long');
+  });
 });
 
 describe('describeError', () => {

@@ -17,6 +17,7 @@
  * uniformly; the two wasm engines lazy-load their module on first call.
  */
 import { createRequire } from 'node:module';
+import type * as ZXingLibrary from '@zxing/library';
 import jsQR from 'jsqr';
 import { readBarcodes } from 'zxing-wasm/reader';
 import { scanImageData } from '@undecaf/zbar-wasm';
@@ -29,7 +30,7 @@ import { scanImageData } from '@undecaf/zbar-wasm';
 // build.) Loading it via `createRequire` sidesteps ESM named-export resolution
 // entirely and works identically under Vite, Node, and Playwright.
 const { BinaryBitmap, DecodeHintType, HybridBinarizer, QRCodeReader, RGBLuminanceSource } =
-  createRequire(import.meta.url)('@zxing/library') as typeof import('@zxing/library');
+  createRequire(import.meta.url)('@zxing/library') as typeof ZXingLibrary;
 
 export type DecodeOutcome = { ok: true; text: string } | { ok: false };
 

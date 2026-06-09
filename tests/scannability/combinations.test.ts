@@ -151,7 +151,7 @@ describe('combinatorial scannability — field battery', () => {
   const FLOOR = GUARDS.robustnessFloor;
 
   it(`every high-risk combination scans within ${MARGIN * 100}% of the square baseline`, async () => {
-    const baseline = await robustness(styleFor('square', 'square', false), STRESS_PAYLOAD);
+    const baseline = await robustness(styleFor('square', 'square', 'none'), STRESS_PAYLOAD);
     expect(baseline, 'square baseline sanity').toBeGreaterThan(FLOOR);
     for (const { name, style } of RISKY) {
       const score = await robustness(style, STRESS_PAYLOAD);

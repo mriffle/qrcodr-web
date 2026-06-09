@@ -17,15 +17,19 @@ type Pending = 'png' | 'svg' | null;
  */
 export function ExportRow({ qr, style }: Props) {
   const [pending, setPending] = useState<Pending>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const handleSvg = useCallback(() => {
     if (!qr) return;
     setPending('svg');
+    setExportError(null);
     try {
       const svg = qrToSvgString(qr, style);
       const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
       const name = `${payloadToFilenameSlug(qr.payload)}.svg`;
       downloadBlob(blob, name);
+    } catch {
+      setExportError('Eject failed :: SVG write error');
     } finally {
       setPending(null);
     }
@@ -34,11 +38,14 @@ export function ExportRow({ qr, style }: Props) {
   const handlePng = useCallback(async () => {
     if (!qr) return;
     setPending('png');
+    setExportError(null);
     try {
       const svg = qrToSvgString(qr, style);
       const blob = await svgToPng(svg, PNG_OUTPUT_SIZE);
       const name = `${payloadToFilenameSlug(qr.payload)}.png`;
       downloadBlob(blob, name);
+    } catch {
+      setExportError('Eject failed :: PNG rasterization error');
     } finally {
       setPending(null);
     }
@@ -53,6 +60,11 @@ export function ExportRow({ qr, style }: Props) {
         <span className="drawer__legend-sub">
           {disabled ? 'No payload locked' : 'Ready · 2 formats'}
         </span>
+        {exportError !== null && (
+          <span className="drawer__alert" role="alert">
+            {exportError}
+          </span>
+        )}
       </div>
       <div className="drawer__actions">
         <button

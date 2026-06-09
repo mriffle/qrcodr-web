@@ -6,20 +6,11 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: [
-      'dist',
-      'node_modules',
-      'coverage',
-      'playwright-report',
-      'test-results',
-      // Node-environment scannability harness: uses Node-only globals (Buffer,
-      // sharp) and lives outside the tsconfig projects; run via vitest, not tsc.
-      'tests/scannability',
-    ],
+    ignores: ['dist', 'node_modules', 'coverage', 'playwright-report', 'test-results'],
   },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommendedTypeChecked],
-    files: ['**/*.{ts,tsx}'],
+    files: ['**/*.{ts,tsx,mts}'],
     languageOptions: {
       ecmaVersion: 2022,
       globals: globals.browser,
@@ -50,7 +41,13 @@ export default tseslint.config(
     },
   },
   {
-    files: ['tests/e2e/**/*.ts', '*.config.ts', '*.config.js'],
+    files: [
+      'tests/e2e/**/*.ts',
+      'tests/scannability/**/*.ts',
+      'scripts/**/*.mts',
+      '*.config.ts',
+      '*.config.js',
+    ],
     languageOptions: {
       globals: { ...globals.node },
     },

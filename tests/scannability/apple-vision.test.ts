@@ -37,7 +37,6 @@ function appleVisionAvailable(): boolean {
 const AVAILABLE = appleVisionAvailable();
 
 if (!AVAILABLE) {
-  // eslint-disable-next-line no-console
   console.warn('[apple-vision] skipped — requires macOS with a `swift` toolchain.');
 }
 
@@ -63,7 +62,6 @@ describe('real-platform decoder — Apple Vision', () => {
     for (const r of rows) byPath.set(r.path, r);
 
     const okCount = rows.filter((r) => r.vision === r.expect).length;
-    // eslint-disable-next-line no-console
     console.log(`[apple-vision] Vision ${String(okCount)}/${String(rows.length)}`);
   }, 120_000);
 

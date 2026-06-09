@@ -20,7 +20,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import sharp from 'sharp';
-import { validatePayload } from '../../src/lib/payload';
+import { validatePayload, type ValidatedPayload } from '../../src/lib/payload';
 import {
   generateQr,
   qrToSvgString,
@@ -70,7 +70,7 @@ async function panel(img: Rgba, want: string): Promise<number> {
   return ok;
 }
 
-function mustValidate(p: string): import('../../src/lib/payload').ValidatedPayload {
+function mustValidate(p: string): ValidatedPayload {
   const v = validatePayload(p);
   if (!v.ok) throw new Error(`invalid test payload: ${p}`);
   return v.value;

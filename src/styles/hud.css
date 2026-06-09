@@ -1121,6 +1121,15 @@
   color: var(--bone-mute);
 }
 
+/* Coral system alert for a failed export — the drawer's error channel. */
+.drawer__alert {
+  font-family: var(--font-mono);
+  font-size: var(--label-size);
+  text-transform: uppercase;
+  letter-spacing: var(--label-track);
+  color: var(--coral);
+}
+
 .drawer__actions {
   display: flex;
   gap: 0.65rem;
