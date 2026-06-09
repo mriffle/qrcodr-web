@@ -164,19 +164,31 @@ export const DEFAULT_STYLE: QrStyle = {
 };
 
 /**
- * Sanitize a raw user-entered center-text label: strip control characters,
+ * Code points the embedded Orbitron Bold face covers: printable ASCII and
+ * printable Latin-1. The center-text layout sizes its carved backing plate
+ * with a width model tuned to Orbitron's advances; anything outside this
+ * repertoire (CJK, emoji, …) would render in a fallback system font with
+ * wider glyphs, overflowing the plate onto live data modules — an
+ * unbudgeted draw on the error-correction margin. C0/C1 controls and DEL
+ * are excluded by construction.
+ */
+function isRenderableCenterTextChar(codePoint: number): boolean {
+  return (codePoint >= 0x20 && codePoint <= 0x7e) || (codePoint >= 0xa0 && codePoint <= 0xff);
+}
+
+/**
+ * Sanitize a raw user-entered center-text label: keep only code points the
+ * embedded display face can render (see {@link isRenderableCenterTextChar}),
  * trim whitespace, and cap to {@link CENTER_TEXT_MAX_LENGTH} code points.
  * Returns the cleaned string (possibly empty — callers map '' to null on
  * QrStyle).
  */
 export function sanitizeCenterText(raw: string): string {
-  // eslint-disable-next-line no-control-regex
-  const stripped = raw.replace(/[\u0000-\u001F\u007F]/g, '');
-  // Slice by code point, not UTF-16 unit: a unit-based slice can cut a
-  // surrogate pair in half at the cap (e.g. an emoji straddling the 10th
-  // unit), leaving a lone surrogate that turns into U+FFFD when the
-  // exported SVG is UTF-8-encoded.
-  return [...stripped.trim()].slice(0, CENTER_TEXT_MAX_LENGTH).join('');
+  const kept = [...raw].filter((ch) => isRenderableCenterTextChar(ch.codePointAt(0) ?? 0));
+  // Slice by code point, not UTF-16 unit — today's repertoire is all
+  // single-unit BMP, but if it ever widens, a unit slice could cut a
+  // surrogate pair at the cap and leave a lone surrogate in the SVG.
+  return [...kept.join('').trim()].slice(0, CENTER_TEXT_MAX_LENGTH).join('');
 }
 
 /**

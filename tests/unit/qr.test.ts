@@ -880,13 +880,14 @@ describe('sanitizeCenterText', () => {
     expect(sanitizeCenterText('')).toBe('');
   });
 
-  test('slices by code point — an emoji at the cap is dropped whole, never split', () => {
-    // 11 emoji = 11 code points but 22 UTF-16 units. A unit-based slice(0, 10)
-    // would cut the 6th emoji in half and leave a lone high surrogate, which
-    // becomes U+FFFD when the exported SVG is UTF-8-encoded.
-    const out = sanitizeCenterText('🙂'.repeat(11));
-    expect(out).toBe('🙂'.repeat(CENTER_TEXT_MAX_LENGTH));
-    expect(/[\uD800-\uDBFF]$/.test(out)).toBe(false);
+  test('strips code points outside the embedded font repertoire (CJK, emoji)', () => {
+    // Orbitron (the embedded display face) covers printable ASCII + Latin-1.
+    // Anything else falls back to a wider system font that can overflow the
+    // carved backing plate onto live modules, so the sanitizer drops it.
+    expect(sanitizeCenterText('OPS中文🙂!')).toBe('OPS!');
+    expect(sanitizeCenterText('🙂'.repeat(11))).toBe('');
+    // Latin-1 diacritics are inside the repertoire and survive.
+    expect(sanitizeCenterText('Ælflæd')).toBe('Ælflæd');
   });
 });
 
