@@ -1,4 +1,12 @@
-import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import {
   CENTER_TEXT_MAX_LENGTH,
   FINDER_SWATCH_VIEWBOX,
@@ -162,6 +170,16 @@ function usePickerMenu() {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  // Close and return focus to the trigger — for Escape and option selection,
+  // where the focused node lives inside the menu and is about to unmount
+  // (which would otherwise drop focus on <body> and strand keyboard users).
+  // Outside clicks close via setOpen(false) directly: there, focus belongs
+  // wherever the user clicked, not back on the trigger.
+  const close = useCallback(() => {
+    setOpen(false);
+    triggerRef.current?.focus();
+  }, []);
+
   useEffect(() => {
     if (!open) return undefined;
     const onDocPointer = (e: PointerEvent) => {
@@ -169,7 +187,7 @@ function usePickerMenu() {
       if (!rootRef.current.contains(e.target as Node)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') close();
     };
     document.addEventListener('pointerdown', onDocPointer);
     document.addEventListener('keydown', onKey);
@@ -177,7 +195,7 @@ function usePickerMenu() {
       document.removeEventListener('pointerdown', onDocPointer);
       document.removeEventListener('keydown', onKey);
     };
-  }, [open]);
+  }, [open, close]);
 
   useLayoutEffect(() => {
     if (!open || !triggerRef.current || !menuRef.current) return;
@@ -189,7 +207,7 @@ function usePickerMenu() {
     setPlacement(spaceBelow < menuHeight && spaceAbove > spaceBelow ? 'up' : 'down');
   }, [open]);
 
-  return { open, setOpen, placement, rootRef, triggerRef, menuRef };
+  return { open, setOpen, close, placement, rootRef, triggerRef, menuRef };
 }
 
 /**
@@ -215,7 +233,7 @@ function ShapePickerRow<T extends string>({
   onChange: (next: T) => void;
   renderSwatch: (value: T) => ReactNode;
 }) {
-  const { open, setOpen, placement, rootRef, triggerRef, menuRef } = usePickerMenu();
+  const { open, setOpen, close, placement, rootRef, triggerRef, menuRef } = usePickerMenu();
   const menuId = useId();
   const current = options.find((s) => s.value === value) ?? options[0];
 
@@ -264,7 +282,7 @@ function ShapePickerRow<T extends string>({
                   title={s.label}
                   onClick={() => {
                     onChange(s.value);
-                    setOpen(false);
+                    close();
                   }}
                 >
                   {renderSwatch(s.value)}
@@ -366,7 +384,7 @@ function CenterIconRow({
   background: string;
   onChange: (next: CenterIconDef) => void;
 }) {
-  const { open, setOpen, placement, rootRef, triggerRef, menuRef } = usePickerMenu();
+  const { open, setOpen, close, placement, rootRef, triggerRef, menuRef } = usePickerMenu();
   const menuId = useId();
 
   return (
@@ -409,7 +427,7 @@ function CenterIconRow({
                   data-testid={`center-icon-option-${icon.id}`}
                   onClick={() => {
                     onChange(icon);
-                    setOpen(false);
+                    close();
                   }}
                   title={icon.label}
                 >
