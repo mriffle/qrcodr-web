@@ -1,18 +1,20 @@
 import { useEffect, useState } from 'react';
 
+// UTC, not local: the masthead is documented as a UTC timestamp and shows
+// no zone marker, so local time would silently lie outside UTC+0.
 function formatStamp(d: Date): string {
-  const yy = String(d.getFullYear()).slice(2);
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mi = String(d.getMinutes()).padStart(2, '0');
-  const ss = String(d.getSeconds()).padStart(2, '0');
+  const yy = String(d.getUTCFullYear()).slice(2);
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  const hh = String(d.getUTCHours()).padStart(2, '0');
+  const mi = String(d.getUTCMinutes()).padStart(2, '0');
+  const ss = String(d.getUTCSeconds()).padStart(2, '0');
   return `${yy}.${mm}.${dd}/${hh}:${mi}:${ss}`;
 }
 
 /**
  * The HUD masthead — system banner for the operative terminal.
- * Shows the brand sigil, a live UTC-style timestamp, and channel info.
+ * Shows the brand sigil, a live UTC timestamp, and channel info.
  */
 export function TitleBlock() {
   const [stamp, setStamp] = useState(() => formatStamp(new Date()));
