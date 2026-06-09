@@ -879,6 +879,15 @@ describe('sanitizeCenterText', () => {
     expect(sanitizeCenterText('   ')).toBe('');
     expect(sanitizeCenterText('')).toBe('');
   });
+
+  test('slices by code point — an emoji at the cap is dropped whole, never split', () => {
+    // 11 emoji = 11 code points but 22 UTF-16 units. A unit-based slice(0, 10)
+    // would cut the 6th emoji in half and leave a lone high surrogate, which
+    // becomes U+FFFD when the exported SVG is UTF-8-encoded.
+    const out = sanitizeCenterText('🙂'.repeat(11));
+    expect(out).toBe('🙂'.repeat(CENTER_TEXT_MAX_LENGTH));
+    expect(/[\uD800-\uDBFF]$/.test(out)).toBe(false);
+  });
 });
 
 describe('escapeXmlText', () => {

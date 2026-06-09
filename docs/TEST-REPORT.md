@@ -14,14 +14,14 @@ and apps actually use.
 
 | Layer                                     | Suite                                     |   Tests |
 | ----------------------------------------- | ----------------------------------------- | ------: |
-| Unit & component                          | `tests/unit`                              |     159 |
+| Unit & component                          | `tests/unit`                              |     160 |
 | Scannability · finder/alignment shapes    | `finder-shapes`                           |       2 |
 | Scannability · combinatorial matrix       | `combinations`                            |     113 |
 | Scannability · center-overlay budget      | `overlay-budget`                          |       3 |
 | Real-platform OpenCV/WeChat (gated)       | `python-decoders`                         |       4 |
 | Real-platform Apple Vision (macOS, gated) | `apple-vision`                            |       2 |
 | End-to-end · Playwright (3 browsers)      | `generate-and-download` · `canvas-vision` |     262 |
-| **Total**                                 |                                           | **545** |
+| **Total**                                 |                                           | **546** |
 
 Counts are collected with `vitest list` / `playwright --list` (tests are
 enumerated, not executed), so they are identical on every machine. The E2E count

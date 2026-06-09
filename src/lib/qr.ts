@@ -165,13 +165,18 @@ export const DEFAULT_STYLE: QrStyle = {
 
 /**
  * Sanitize a raw user-entered center-text label: strip control characters,
- * trim whitespace, and cap to {@link CENTER_TEXT_MAX_LENGTH}. Returns the
- * cleaned string (possibly empty — callers map '' to null on QrStyle).
+ * trim whitespace, and cap to {@link CENTER_TEXT_MAX_LENGTH} code points.
+ * Returns the cleaned string (possibly empty — callers map '' to null on
+ * QrStyle).
  */
 export function sanitizeCenterText(raw: string): string {
   // eslint-disable-next-line no-control-regex
   const stripped = raw.replace(/[\u0000-\u001F\u007F]/g, '');
-  return stripped.trim().slice(0, CENTER_TEXT_MAX_LENGTH);
+  // Slice by code point, not UTF-16 unit: a unit-based slice can cut a
+  // surrogate pair in half at the cap (e.g. an emoji straddling the 10th
+  // unit), leaving a lone surrogate that turns into U+FFFD when the
+  // exported SVG is UTF-8-encoded.
+  return [...stripped.trim()].slice(0, CENTER_TEXT_MAX_LENGTH).join('');
 }
 
 /**
