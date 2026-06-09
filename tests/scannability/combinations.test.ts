@@ -79,7 +79,7 @@ async function robustness(style: QrStyle, payload: string): Promise<number> {
   const master = await renderMaster(payload, style);
   let ok = 0;
   let total = 0;
-  for (const apply of STANDARD_BATTERY) {
+  for (const { apply } of STANDARD_BATTERY) {
     const img = await apply(master);
     for (const decoder of DECODERS) {
       total++;

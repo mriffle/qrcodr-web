@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { GUARDS, pct } from '../tests/scannability/guards.ts';
 import { DECODERS } from '../tests/scannability/decoders.ts';
-import { FAMILIES } from '../tests/scannability/stress.ts';
+import { STANDARD_BATTERY } from '../tests/scannability/stress.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'docs', 'TEST-REPORT.md');
@@ -104,7 +104,7 @@ const NATIVE_ENGINES = [
   },
 ];
 
-// What each degradation family models, keyed by FAMILIES[].name.
+// What each degradation family models, keyed by STANDARD_BATTERY[].family.
 const FAMILY_MODELS: Record<string, string> = {
   shrink: 'Scanning from a distance',
   blur: 'Out-of-focus / motion',
@@ -167,16 +167,22 @@ function build(): string {
     ],
   );
 
+  // Render the battery the suite actually enforces (STANDARD_BATTERY), grouped
+  // by family — not a hypothetical level sweep that nothing runs.
+  const levelsByFamily = new Map<string, string[]>();
+  for (const step of STANDARD_BATTERY) {
+    const levels = levelsByFamily.get(step.family) ?? [];
+    levels.push(step.level);
+    levelsByFamily.set(step.family, levels);
+  }
   const battery = table(
-    ['Family', 'Levels', 'Easiest → hardest', 'Models'],
-    ['---', '---:', '---', '---'],
-    FAMILIES.map((f) => {
-      const first = f.levels[0];
-      const last = f.levels[f.levels.length - 1];
-      const span =
-        first === undefined || last === undefined ? '—' : `${f.label(first)} → ${f.label(last)}`;
-      return [f.name, String(f.levels.length), span, FAMILY_MODELS[f.name] ?? '—'];
-    }),
+    ['Family', 'Enforced level(s)', 'Models'],
+    ['---', '---', '---'],
+    [...levelsByFamily.entries()].map(([family, levels]) => [
+      family,
+      levels.join(' · '),
+      FAMILY_MODELS[family] ?? '—',
+    ]),
   );
 
   const guards = table(
@@ -262,8 +268,9 @@ physical device.
 
 ## Field-degradation battery
 
-Before decoding, each artifact is pushed through transforms that model how a
-camera mangles a code in the wild:
+Before decoding, each artifact under field stress is pushed through every step
+below — the exact transforms and intensities the suite enforces — modeling how
+a camera mangles a code in the wild:
 
 ${battery}
 

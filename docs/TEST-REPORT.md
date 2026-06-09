@@ -56,21 +56,22 @@ physical device.
 
 ## Field-degradation battery
 
-Before decoding, each artifact is pushed through transforms that model how a
-camera mangles a code in the wild:
+Before decoding, each artifact under field stress is pushed through every step
+below — the exact transforms and intensities the suite enforces — modeling how
+a camera mangles a code in the wild:
 
-| Family      | Levels | Easiest → hardest | Models                                    |
-| ----------- | -----: | ----------------- | ----------------------------------------- |
-| shrink      |     11 | 220px → 50px      | Scanning from a distance                  |
-| blur        |     12 | σ0.5 → σ8         | Out-of-focus / motion                     |
-| contrast    |     10 | 100% → 8%         | Faded print, glare, dim screen            |
-| shear       |      9 | 0 → 0.9           | Off-axis viewing angle (affine)           |
-| rotate      |      7 | 0° → 45°          | Tilted camera                             |
-| jpeg        |      8 | q90 → q8          | Screenshot / messaging recompression      |
-| glare       |      7 | 20% → 98%         | Specular reflection off a screen          |
-| noise       |      7 | σ10 → σ100        | Low-light sensor grain (seeded)           |
-| occlusion   |      6 | 5% → 30%          | Finger / sticker over data modules        |
-| perspective |      7 | 0.05 → 0.44       | True off-axis foreshortening (homography) |
+| Family      | Enforced level(s) | Models                                    |
+| ----------- | ----------------- | ----------------------------------------- |
+| shrink      | 110px · 72px      | Scanning from a distance                  |
+| blur        | σ2 · σ3.5         | Out-of-focus / motion                     |
+| contrast    | 27%               | Faded print, glare, dim screen            |
+| shear       | 0.4               | Off-axis viewing angle (affine)           |
+| rotate      | 20°               | Tilted camera                             |
+| jpeg        | q25               | Screenshot / messaging recompression      |
+| glare       | 85%               | Specular reflection off a screen          |
+| noise       | σ30               | Low-light sensor grain (seeded)           |
+| occlusion   | 18%               | Finger / sticker over data modules        |
+| perspective | 0.12              | True off-axis foreshortening (homography) |
 
 ## Guards (enforced thresholds)
 

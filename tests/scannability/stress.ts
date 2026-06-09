@@ -313,109 +313,35 @@ function solve8(A: number[][], b: number[]): number[] {
   return m.map((row, i) => row[n]! / (row[i]! || 1e-12));
 }
 
-export type Family = {
-  name: string;
-  /** Levels ordered easy → hard. */
-  levels: number[];
-  /** Human label for a level value. */
-  label: (v: number) => string;
-  apply: (master: Buffer, level: number) => Promise<Rgba>;
-  /** 'lowerHarder' means a smaller surviving value = more robust (e.g. px). */
-  direction: 'higherHarder' | 'lowerHarder';
+/** One enforced step of the standard battery, self-describing for the report. */
+export type BatteryStep = {
+  /** Degradation family (which transform above this step exercises). */
+  family: string;
+  /** Human-readable label of the enforced intensity. */
+  level: string;
+  apply: (master: Buffer) => Promise<Rgba>;
 };
 
-export const FAMILIES: Family[] = [
-  {
-    name: 'shrink',
-    levels: [220, 180, 150, 130, 110, 95, 82, 72, 64, 56, 50],
-    label: (v) => `${v}px`,
-    apply: shrink,
-    direction: 'lowerHarder',
-  },
-  {
-    name: 'blur',
-    levels: [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 5, 6, 7, 8],
-    label: (v) => `σ${v}`,
-    apply: blur,
-    direction: 'higherHarder',
-  },
-  {
-    name: 'contrast',
-    levels: [1, 0.8, 0.6, 0.45, 0.35, 0.27, 0.2, 0.15, 0.11, 0.08],
-    label: (v) => `${Math.round(v * 100)}%`,
-    apply: lowContrast,
-    direction: 'lowerHarder',
-  },
-  {
-    name: 'shear',
-    levels: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.75, 0.9],
-    label: (v) => `${v}`,
-    apply: shear,
-    direction: 'higherHarder',
-  },
-  {
-    name: 'rotate',
-    levels: [0, 5, 10, 15, 25, 35, 45],
-    label: (v) => `${v}°`,
-    apply: rotate,
-    direction: 'higherHarder',
-  },
-  {
-    name: 'jpeg',
-    levels: [90, 70, 50, 35, 25, 18, 12, 8],
-    label: (v) => `q${v}`,
-    apply: jpeg,
-    direction: 'lowerHarder',
-  },
-  {
-    name: 'glare',
-    levels: [0.2, 0.4, 0.6, 0.75, 0.85, 0.92, 0.98],
-    label: (v) => `${Math.round(v * 100)}%`,
-    apply: glare,
-    direction: 'higherHarder',
-  },
-  {
-    name: 'noise',
-    levels: [10, 25, 40, 55, 70, 85, 100],
-    label: (v) => `σ${v}`,
-    apply: noise,
-    direction: 'higherHarder',
-  },
-  {
-    name: 'occlusion',
-    levels: [0.05, 0.1, 0.15, 0.2, 0.25, 0.3],
-    label: (v) => `${Math.round(v * 100)}%`,
-    apply: occlusion,
-    direction: 'higherHarder',
-  },
-  {
-    name: 'perspective',
-    levels: [0.05, 0.1, 0.15, 0.2, 0.28, 0.36, 0.44],
-    label: (v) => `${v}`,
-    apply: perspective,
-    direction: 'higherHarder',
-  },
-];
-
 /**
- * The standard robustness battery: one moderate-to-hard level from every
- * degradation family, chosen to discriminate a healthy code from a regressing
- * one (extreme levels fail everything and carry no signal). Shared by the
- * combinatorial field guard (`combinations.test.ts`) and the live CI metrics
- * (`report-metrics.mts`) so the published numbers can never drift from the
- * battery the suite actually enforces.
+ * The standard robustness battery: one or two moderate-to-hard levels from
+ * every degradation family, chosen to discriminate a healthy code from a
+ * regressing one (extreme levels fail everything and carry no signal). Shared
+ * by the combinatorial field guard (`combinations.test.ts`), the live CI
+ * metrics (`report-metrics.mts`), and the committed report's battery table
+ * (`generate-test-report.mts`) so neither the published numbers nor the
+ * documented battery can drift from what the suite actually enforces.
  */
-export const STANDARD_BATTERY: ((master: Buffer) => Promise<Rgba>)[] = [
-  (m) => shrink(m, 110),
-  (m) => shrink(m, 72),
-  (m) => blur(m, 2),
-  (m) => blur(m, 3.5),
-  (m) => lowContrast(m, 0.27),
-  (m) => shear(m, 0.4),
-  (m) => rotate(m, 20),
-  (m) => jpeg(m, 25),
-  (m) => glare(m, 0.85),
-  (m) => noise(m, 30),
-  (m) => occlusion(m, 0.18),
-  (m) => perspective(m, 0.12),
+export const STANDARD_BATTERY: BatteryStep[] = [
+  { family: 'shrink', level: '110px', apply: (m) => shrink(m, 110) },
+  { family: 'shrink', level: '72px', apply: (m) => shrink(m, 72) },
+  { family: 'blur', level: 'σ2', apply: (m) => blur(m, 2) },
+  { family: 'blur', level: 'σ3.5', apply: (m) => blur(m, 3.5) },
+  { family: 'contrast', level: '27%', apply: (m) => lowContrast(m, 0.27) },
+  { family: 'shear', level: '0.4', apply: (m) => shear(m, 0.4) },
+  { family: 'rotate', level: '20°', apply: (m) => rotate(m, 20) },
+  { family: 'jpeg', level: 'q25', apply: (m) => jpeg(m, 25) },
+  { family: 'glare', level: '85%', apply: (m) => glare(m, 0.85) },
+  { family: 'noise', level: 'σ30', apply: (m) => noise(m, 30) },
+  { family: 'occlusion', level: '18%', apply: (m) => occlusion(m, 0.18) },
+  { family: 'perspective', level: '0.12', apply: (m) => perspective(m, 0.12) },
 ];
