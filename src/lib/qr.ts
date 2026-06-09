@@ -483,7 +483,10 @@ function emitChamferSubpath(
   return parts.join('');
 }
 
-/** Round to 4 decimals and stringify, trimming float noise from pill coords. */
+/**
+ * Round to 4 decimals and stringify, trimming float noise from derived
+ * coordinates (pill runs, locator shapes, the center-overlay layout).
+ */
 function fmt(n: number): string {
   return String(Math.round(n * 1e4) / 1e4);
 }
@@ -1081,18 +1084,18 @@ function renderCenterOverlay(style: QrStyle, size: number): string {
   const layout = centerOverlayLayout(size, icon !== null, text ? text.length : 0);
   const parts: string[] = [];
   parts.push(
-    `<rect x="${String(layout.padX)}" y="${String(layout.padY)}" width="${String(layout.padWidth)}" height="${String(layout.padHeight)}" fill="${style.background}"/>`,
+    `<rect x="${fmt(layout.padX)}" y="${fmt(layout.padY)}" width="${fmt(layout.padWidth)}" height="${fmt(layout.padHeight)}" fill="${style.background}"/>`,
   );
   if (icon && layout.icon) {
     parts.push(
-      `<g transform="translate(${String(layout.icon.x)} ${String(layout.icon.y)}) scale(${String(layout.icon.scale)})" color="${style.foreground}">`,
+      `<g transform="translate(${fmt(layout.icon.x)} ${fmt(layout.icon.y)}) scale(${fmt(layout.icon.scale)})" color="${style.foreground}">`,
       icon.innerSvg,
       `</g>`,
     );
   }
   if (text && layout.text) {
     parts.push(
-      `<text x="${String(layout.text.x)}" y="${String(layout.text.y)}" text-anchor="middle" dominant-baseline="central" font-family="${CENTER_TEXT_FONT_FAMILY}" font-weight="700" font-size="${String(layout.text.fontSize)}" fill="${style.foreground}">${escapeXmlText(text)}</text>`,
+      `<text x="${fmt(layout.text.x)}" y="${fmt(layout.text.y)}" text-anchor="middle" dominant-baseline="central" font-family="${CENTER_TEXT_FONT_FAMILY}" font-weight="700" font-size="${fmt(layout.text.fontSize)}" fill="${style.foreground}">${escapeXmlText(text)}</text>`,
     );
   }
   return parts.join('');
