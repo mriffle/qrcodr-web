@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import {
   CENTER_TEXT_FONT_FAMILY,
   QUIET_ZONE,
@@ -26,6 +27,16 @@ type Props = {
  * box-shadow; this component just paints modules on a white square.
  */
 export function QrDrawing({ qr, style }: Props) {
+  const { moduleShape, finderShape } = style;
+  // Path geometry depends only on the matrix and the two shape fields.
+  // Memoized so re-renders that change only `style`'s identity — every
+  // color-drag tick and center-text keystroke — don't re-walk the matrix
+  // (~30k subpaths at v40 for a path that hasn't changed).
+  const d = useMemo(
+    () => (qr ? qrToSvgPath(qr.matrix, qr.size, qr.version, { moduleShape, finderShape }) : ''),
+    [qr, moduleShape, finderShape],
+  );
+
   if (!qr) {
     return (
       <div className="qr-frame qr-frame--empty" data-empty="true">
@@ -53,9 +64,8 @@ export function QrDrawing({ qr, style }: Props) {
     );
   }
 
-  const { matrix, size, version } = qr;
+  const { size, version } = qr;
   const total = size + QUIET_ZONE * 2;
-  const d = qrToSvgPath(matrix, size, version, style);
   const shapeRendering = shapeRenderingFor(style);
   const overlayIcon =
     style.centerIcon && style.centerIcon.innerSvg.length > 0 ? style.centerIcon : null;

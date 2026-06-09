@@ -291,8 +291,16 @@ function getAlignmentRowColCoords(version: number): number[] {
  * given version. Each center defines a 5×5 block at (cx-2..cx+2, cy-2..cy+2).
  * Excludes centers that overlap finder patterns (those are not alignment
  * patterns, just finders).
+ *
+ * Cached per version: {@link isAlignmentModule} consults this once per
+ * on-module while building the path (~16k times for a v40 code), and the
+ * result is a pure function of the version (bounded at 40 entries).
  */
+const alignmentCentersCache = new Map<number, readonly [number, number][]>();
+
 function getAlignmentCenters(version: number): readonly [number, number][] {
+  const cached = alignmentCentersCache.get(version);
+  if (cached) return cached;
   const pos = getAlignmentRowColCoords(version);
   const n = pos.length;
   const out: [number, number][] = [];
@@ -308,6 +316,7 @@ function getAlignmentCenters(version: number): readonly [number, number][] {
       out.push([ci, cj]);
     }
   }
+  alignmentCentersCache.set(version, out);
   return out;
 }
 
@@ -698,7 +707,9 @@ export function qrToSvgPath(
   matrix: Uint8Array,
   size: number,
   version: number,
-  style: QrStyle,
+  // Only the shape fields: path geometry is color-independent, and the narrow
+  // type lets callers memoize on exactly these (see QrDrawing).
+  style: Pick<QrStyle, 'moduleShape' | 'finderShape'>,
 ): string {
   const shaped = style.finderShape !== 'square';
   const classify = (x: number, y: number): CellKind => {
@@ -818,7 +829,9 @@ export function finderSwatchPath(shape: QrStyle['finderShape']): string {
 }
 
 /** Pick the right `shape-rendering` attribute for the chosen style. */
-export function shapeRenderingFor(style: QrStyle): 'crispEdges' | 'geometricPrecision' {
+export function shapeRenderingFor(
+  style: Pick<QrStyle, 'moduleShape' | 'finderShape'>,
+): 'crispEdges' | 'geometricPrecision' {
   return style.moduleShape === 'square' && style.finderShape === 'square'
     ? 'crispEdges'
     : 'geometricPrecision';
