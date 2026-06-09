@@ -1,0 +1,8 @@
+<!-- qrcodr favicon: a mini QR motif in the HUD palette — onyx-void tile,
+     acid-lime finder ring (1:1:3 ratio like the real locator patterns)
+     plus solid corner blocks and scattered data marks. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="7" fill="#04060A"/>
+  <path fill="#B6FF1F" fill-rule="evenodd" d="M6 6h10v10H6zm2 2v6h6V8zm1.5 1.5h3v3h-3z"/>
+  <path fill="#B6FF1F" d="M20 6h6v6h-6zM6 20h6v6H6zm14 0h3v3h-3zm3 3h3v3h-3zm-3 3h3v3h-3zm3-9h3v3h-3zm-6 0h3v3h-3z"/>
+</svg>
