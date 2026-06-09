@@ -99,8 +99,11 @@ export async function decodeZbar(
 ): Promise<DecodeOutcome> {
   try {
     const symbols = await scanImageData({ data: rgba, width, height });
-    const hit = symbols.find((s) => s.decode().length > 0);
-    return hit ? { ok: true, text: hit.decode() } : { ok: false };
+    for (const symbol of symbols) {
+      const text = symbol.decode();
+      if (text.length > 0) return { ok: true, text };
+    }
+    return { ok: false };
   } catch {
     return { ok: false };
   }

@@ -53,7 +53,14 @@ function playwrightCount(): number {
     maxBuffer: 1e8,
   });
   const m = /Total:\s+(\d+)\s+tests?/.exec(out);
-  return m ? Number(m[1]) : 0;
+  if (!m) {
+    // Fail loud: silently returning 0 would surface as a baffling "E2E: 0"
+    // diff in the committed report instead of pointing at the real cause.
+    throw new Error(
+      'playwright --list output did not contain a "Total: N tests" line — did its summary format change?',
+    );
+  }
+  return Number(m[1]);
 }
 
 function sumWhere(counts: Map<string, number>, predicate: (file: string) => boolean): number {
