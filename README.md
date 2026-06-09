@@ -29,13 +29,14 @@ Everything runs in the browser. There is no server, no analytics, and no network
 - **PNG export** — high-resolution 1024×1024 raster, ready for print or sharing
 - **SVG export** — infinitely scalable vector, ready for design tools
 - **Custom colors** — pick any foreground and background hex pair with the inline color pickers
-- **Module shape** — choose between crisp **square** modules or smooth **rounded** modules (adjacent modules merge into pills; isolated modules become circles)
-- **Center icons** — drop a decorative icon into the middle of the code (anchor, cat, crown, dinosaur, fish, flame, ghost, heart, leaf, lightning, moon, mushroom, music note, paw print, rocket, skull, smiley, snowflake, star, sun)
+- **Module shapes** — seven styles for the data modules: crisp **square**, smooth **rounded** (adjacent modules merge into blobs), faceted **chamfer** (45° cut corners), polka-dot **dot**, gapped **grid**, and **horizontal/vertical pill** (runs of modules fuse into capsules)
+- **Finder shapes** — restyle the locator patterns (the three corner finders and every alignment pattern): **square**, **rounded**, **octagon**, or **bullseye** — only shapes measured to scan as reliably as square ship
+- **Center icons** — drop a decorative icon into the middle of the code (anchor, cat, crown, dinosaur, fish, flame, ghost, heart, leaf, lightning, moon, mushroom, music note, octopus, paw print, rocket, skull, smiley, snowflake, star, sun)
 - **Center text** — add a short label (up to 10 characters) below the icon or on its own
 - **Live preview** — see the QR update as you type, with an operative-HUD viewport (corner brackets, reticle crosshair, lime bloom)
 - **Telemetry panel** — see version, module count, error-correction level, and quiet zone at a glance
 - **Maximum error correction (level H, ~30%)** — center icons and labels stay scannable across every phone camera in the E2E suite
-- **Up to 1,273 characters** — supports the full version-40 byte-mode capacity
+- **Up to 1,273 bytes of payload** — the full version-40 byte-mode capacity at level H; multi-byte UTF-8 characters (é, emoji, CJK) count as 2–4 bytes each
 - **Mobile-ready** — responsive layout collapses to a single column under 920px
 - **Reduced-motion aware** — ambient effects (scanlines, pulse, caret blink) disable themselves for users who opt out
 - **Accessible** — visible focus rings, proper ARIA roles on every control, WCAG-AA text contrast
