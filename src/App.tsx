@@ -83,11 +83,7 @@ export function App() {
         />
       </div>
 
-      <section
-        className="stage"
-        aria-label="QR preview viewport"
-        data-state={qr ? 'lock' : 'standby'}
-      >
+      <section className="stage" aria-label="QR preview viewport">
         <span className="stage__crosshair" aria-hidden="true" />
         <span className="stage__bracket stage__bracket--tl" aria-hidden="true" />
         <span className="stage__bracket stage__bracket--tr" aria-hidden="true" />

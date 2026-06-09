@@ -146,6 +146,53 @@ const FINDER_SHAPES: { value: QrStyle['finderShape']; label: string }[] = [
 ];
 
 /**
+ * Shared popover behavior for the telemetry picker rows (shape + icon):
+ * open/close state, dismissal on outside pointerdown or Escape, and
+ * viewport-aware placement — opens downward by default, but flips up when
+ * the menu would overflow the viewport bottom and there's more room above.
+ * Placement is measured in a layout effect (before paint) so the menu never
+ * flashes in the wrong position. Attach `rootRef` to the row, `triggerRef`
+ * to the trigger button, `menuRef` to the menu, and suffix the menu class
+ * with `--${placement}`.
+ */
+function usePickerMenu() {
+  const [open, setOpen] = useState(false);
+  const [placement, setPlacement] = useState<'down' | 'up'>('down');
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDocPointer = (e: PointerEvent) => {
+      if (!rootRef.current) return;
+      if (!rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onDocPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDocPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current || !menuRef.current) return;
+    const trigger = triggerRef.current.getBoundingClientRect();
+    const menuHeight = menuRef.current.offsetHeight;
+    const margin = 12;
+    const spaceBelow = window.innerHeight - trigger.bottom - margin;
+    const spaceAbove = trigger.top - margin;
+    setPlacement(spaceBelow < menuHeight && spaceAbove > spaceBelow ? 'up' : 'down');
+  }, [open]);
+
+  return { open, setOpen, placement, rootRef, triggerRef, menuRef };
+}
+
+/**
  * Generic shape-picker row: a swatch-preview trigger that opens a grid of
  * swatch options. Drives both the module-shape and finder-shape controls; the
  * `testIdPrefix` keeps stable per-option test ids (`<prefix>-trigger`,
@@ -168,43 +215,9 @@ function ShapePickerRow<T extends string>({
   onChange: (next: T) => void;
   renderSwatch: (value: T) => ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
-  const [placement, setPlacement] = useState<'down' | 'up'>('down');
-  const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const { open, setOpen, placement, rootRef, triggerRef, menuRef } = usePickerMenu();
   const menuId = useId();
   const current = options.find((s) => s.value === value) ?? options[0];
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const onDocPointer = (e: PointerEvent) => {
-      if (!rootRef.current) return;
-      if (!rootRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('pointerdown', onDocPointer);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onDocPointer);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
-  // Open downward by default, but flip up when the menu would overflow the
-  // viewport bottom and there's more room above. Runs before paint so the
-  // menu never appears in the wrong place.
-  useLayoutEffect(() => {
-    if (!open || !triggerRef.current || !menuRef.current) return;
-    const trigger = triggerRef.current.getBoundingClientRect();
-    const menuHeight = menuRef.current.offsetHeight;
-    const margin = 12;
-    const spaceBelow = window.innerHeight - trigger.bottom - margin;
-    const spaceAbove = trigger.top - margin;
-    setPlacement(spaceBelow < menuHeight && spaceAbove > spaceBelow ? 'up' : 'down');
-  }, [open]);
 
   if (!current) return null;
 
@@ -353,26 +366,8 @@ function CenterIconRow({
   background: string;
   onChange: (next: CenterIconDef) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
+  const { open, setOpen, placement, rootRef, triggerRef, menuRef } = usePickerMenu();
   const menuId = useId();
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const onDocPointer = (e: PointerEvent) => {
-      if (!rootRef.current) return;
-      if (!rootRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('pointerdown', onDocPointer);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onDocPointer);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
 
   return (
     <div className="telemetry__row telemetry__row--icon" data-label="Center icon" ref={rootRef}>
@@ -380,6 +375,7 @@ function CenterIconRow({
       <span className="icon-picker">
         <span className="telemetry__value">{value.label}</span>
         <button
+          ref={triggerRef}
           type="button"
           className="icon-picker__trigger"
           aria-haspopup="dialog"
@@ -396,8 +392,9 @@ function CenterIconRow({
         </button>
         {open && (
           <div
+            ref={menuRef}
             id={menuId}
-            className="icon-picker__menu"
+            className={`icon-picker__menu icon-picker__menu--${placement}`}
             role="dialog"
             aria-label="Center icon options"
           >

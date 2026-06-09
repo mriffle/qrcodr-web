@@ -9,19 +9,19 @@ type Props = {
 
 const PNG_OUTPUT_SIZE = 1024;
 
-type Pending = 'png' | 'svg' | null;
-
 /**
  * Export drawer — parallelogram action chips for PNG / SVG export.
  * Lime sigil for PNG, coral for SVG.
  */
 export function ExportRow({ qr, style }: Props) {
-  const [pending, setPending] = useState<Pending>(null);
+  // Only the PNG path has an observable in-flight state: it awaits the
+  // canvas rasterization. The SVG export is synchronous, so a pending flag
+  // for it could never render (React batches the set/unset into one pass).
+  const [rasterizing, setRasterizing] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
 
   const handleSvg = useCallback(() => {
     if (!qr) return;
-    setPending('svg');
     setExportError(null);
     try {
       const svg = qrToSvgString(qr, style);
@@ -30,14 +30,12 @@ export function ExportRow({ qr, style }: Props) {
       downloadBlob(blob, name);
     } catch {
       setExportError('Eject failed :: SVG write error');
-    } finally {
-      setPending(null);
     }
   }, [qr, style]);
 
   const handlePng = useCallback(async () => {
     if (!qr) return;
-    setPending('png');
+    setRasterizing(true);
     setExportError(null);
     try {
       const svg = qrToSvgString(qr, style);
@@ -47,7 +45,7 @@ export function ExportRow({ qr, style }: Props) {
     } catch {
       setExportError('Eject failed :: PNG rasterization error');
     } finally {
-      setPending(null);
+      setRasterizing(false);
     }
   }, [qr, style]);
 
@@ -73,27 +71,27 @@ export function ExportRow({ qr, style }: Props) {
           onClick={() => {
             void handlePng();
           }}
-          disabled={disabled || pending !== null}
+          disabled={disabled || rasterizing}
           data-format="png"
           data-testid="export-png"
         >
           <span className="export-button__sigil" aria-hidden="true">
             ▸
           </span>
-          <span>{pending === 'png' ? 'Rasterizing' : 'PNG · 1024'}</span>
+          <span>{rasterizing ? 'Rasterizing' : 'PNG · 1024'}</span>
         </button>
         <button
           type="button"
           className="export-button"
           onClick={handleSvg}
-          disabled={disabled || pending !== null}
+          disabled={disabled || rasterizing}
           data-format="svg"
           data-testid="export-svg"
         >
           <span className="export-button__sigil" aria-hidden="true">
             ◆
           </span>
-          <span>{pending === 'svg' ? 'Writing' : 'SVG · vector'}</span>
+          <span>SVG · vector</span>
         </button>
       </div>
     </footer>

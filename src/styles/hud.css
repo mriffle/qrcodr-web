@@ -242,36 +242,13 @@
   color: var(--bone-mute);
 }
 
-.payload-input__caret {
-  display: inline-block;
-  width: 9px;
-  height: 1.05rem;
-  background: var(--lime);
-  box-shadow: 0 0 6px var(--lime-glow);
-  animation: blink-caret 1.05s steps(2, end) infinite;
-  vertical-align: middle;
-  margin-left: -2px;
-}
-
-@keyframes blink-caret {
-  0%,
-  50% {
-    opacity: 1;
-  }
-  50.01%,
-  100% {
-    opacity: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .payload-input__caret {
-    animation: none;
-  }
-}
-
+/* The error node stays mounted (it's a live region — see PayloadInput);
+   the coral alert box only materializes when there's a message in it. */
 .payload-input__error {
   display: block;
+}
+
+.payload-input__error:not(:empty) {
   margin-top: 0.65rem;
   padding: 0.45rem 0.65rem;
   background: rgba(255, 79, 94, 0.08);
@@ -284,7 +261,7 @@
   font-weight: 500;
 }
 
-.payload-input__error::before {
+.payload-input__error:not(:empty)::before {
   content: '! ';
   font-weight: 700;
 }
@@ -532,31 +509,50 @@
 
 .icon-picker__menu {
   position: absolute;
-  top: calc(100% + 8px);
   right: -0.4rem;
   z-index: 20;
   width: min(280px, 16.5rem);
   padding: 0.55rem;
   background: var(--onyx-rise);
   border: var(--hair) solid var(--onyx-edge);
-  border-top: var(--rule) solid var(--lime);
   box-shadow:
     0 18px 38px rgba(0, 0, 0, 0.55),
     0 0 18px rgba(182, 255, 31, 0.12);
   animation: hud-rise 180ms var(--ease-out) both;
 }
 
+/* Drops down by default; flips up when it would overflow the viewport
+   (same placement logic as the shape pickers — see usePickerMenu). */
+.icon-picker__menu--down {
+  top: calc(100% + 8px);
+  border-top: var(--rule) solid var(--lime);
+}
+
+.icon-picker__menu--up {
+  bottom: calc(100% + 8px);
+  border-bottom: var(--rule) solid var(--lime);
+}
+
 .icon-picker__menu::before {
   content: '';
   position: absolute;
-  top: -6px;
   right: 1rem;
   width: 10px;
   height: 10px;
   background: var(--onyx-rise);
+  transform: rotate(45deg);
+}
+
+.icon-picker__menu--down::before {
+  top: -6px;
   border-left: var(--hair) solid var(--onyx-edge);
   border-top: var(--rule) solid var(--lime);
-  transform: rotate(45deg);
+}
+
+.icon-picker__menu--up::before {
+  bottom: -6px;
+  border-right: var(--hair) solid var(--onyx-edge);
+  border-bottom: var(--rule) solid var(--lime);
 }
 
 .icon-picker__grid {

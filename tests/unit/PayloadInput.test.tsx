@@ -27,9 +27,16 @@ describe('<PayloadInput />', () => {
     expect(screen.getByRole('status')).toHaveTextContent(/exceeds/i);
   });
 
-  test('does not render an error message in valid state', () => {
+  test('describes the error to the input via aria-describedby', () => {
+    render(<PayloadInput value="" onChange={() => {}} error="empty" />);
+    expect(screen.getByRole('textbox')).toHaveAccessibleDescription(/required/i);
+  });
+
+  test('keeps the live region mounted but empty in valid state', () => {
+    // The status node must pre-exist for screen readers to reliably announce
+    // a later error; only its content changes.
     render(<PayloadInput value="x" onChange={() => {}} error={null} />);
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
   });
 
   test('sets data-error="true" on the wrapper when error is set', () => {

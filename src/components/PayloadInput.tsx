@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { describeError, type ValidationError } from '../lib/payload';
 
 type Props = {
@@ -12,6 +13,7 @@ type Props = {
  */
 export function PayloadInput({ value, onChange, error }: Props) {
   const isError = error !== null;
+  const errorId = useId();
   return (
     <section
       className="payload-input"
@@ -38,6 +40,7 @@ export function PayloadInput({ value, onChange, error }: Props) {
           placeholder="enter URL or text…"
           aria-label="QR code payload"
           aria-invalid={isError}
+          aria-describedby={errorId}
           spellCheck={false}
           autoComplete="off"
           autoCapitalize="off"
@@ -45,11 +48,12 @@ export function PayloadInput({ value, onChange, error }: Props) {
           data-testid="payload-input"
         />
       </div>
-      {isError && (
-        <span className="payload-input__error" role="status">
-          {describeError(error)}
-        </span>
-      )}
+      {/* Always mounted: screen readers reliably announce live-region
+          content *changes*, not nodes inserted together with their text.
+          Empty in the valid state (the box styling is gated on :not(:empty)). */}
+      <span className="payload-input__error" role="status" id={errorId}>
+        {isError ? describeError(error) : ''}
+      </span>
     </section>
   );
 }
